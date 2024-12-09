@@ -50,7 +50,7 @@ func main() {
 	defer stop()
 
 	logger.Debug("Initializing VPN tunnel")
-	t, err := tun.New()
+	t, err := tun.New(logger.With(zap.String("module", "tune")))
 	if nil != err {
 		logger.Error("Failed to create VPN tunnel", zap.Error(err))
 		return
