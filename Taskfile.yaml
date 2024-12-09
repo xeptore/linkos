@@ -1,0 +1,74 @@
+version: "3"
+
+vars:
+  GOLANGCI_LINT_VERSION: v1.62.0
+  COMP_TIME:
+    sh: printf 'constant.compileTime=%s' "$(date -u -Iseconds)"
+
+tasks:
+  clean:
+    cmd: go clean -r -cache -testcache -modcache
+
+  tidy:
+    cmd: go mod tidy -v -x
+
+  clear-build-dir:
+    cmds:
+      - cmd: rm -rf ./bin
+      - cmd: mkdir -p ./bin/{client,server}
+
+  build:client:
+    requires:
+      vars:
+        - COMP_TIME
+    env:
+      CGO_ENABLED: 1
+      CC: clang
+      CXX: clang++
+    vars:
+      GOOS:
+        sh: go env GOOS
+      GOARCH:
+        sh: go env GOARCH
+    cmds:
+      - task: clear-build-dir
+      - cmd: cp ./wintun.dll ./bin
+      - cmd: |-
+          go build \
+            -a \
+            -buildvcs=true \
+            -trimpath \
+            -ldflags="-compressdwarf=true -extldflags=-static -s -w -buildid=''" \
+            -o ./bin/client/lanix_{{.GOOS}}_{{.GOARCH}}.exe \
+            ./cmd/client
+
+  lint:
+    internal: true
+    requires:
+      vars:
+        - OUT_FORMAT
+    cmd: |-
+      go run \
+        github.com/golangci/golangci-lint/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} \
+        run {{ if .FIX }}--fix {{ end }}\
+        --print-resources-usage \
+        --out-format="{{.OUT_FORMAT}}"
+
+  lint:local:
+    cmds:
+      - task: lint
+        vars:
+          OUT_FORMAT: colored-line-number
+
+  lint:local:fix:
+    cmds:
+      - task: lint
+        vars:
+          OUT_FORMAT: colored-line-number
+          FIX: true
+
+  lint:ci:
+    cmds:
+      - task: lint
+        vars:
+          OUT_FORMAT: colored-line-number

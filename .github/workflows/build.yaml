@@ -1,0 +1,97 @@
+name: Build
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+concurrency:
+  group: ${{ github.workflow }}/${{ github.ref_type }}/${{ github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: none
+  deployments: none
+  actions: none
+  checks: none
+  discussions: none
+  id-token: none
+  issues: none
+  packages: none
+  pages: none
+  pull-requests: none
+  repository-projects: none
+  security-events: none
+  statuses: none
+jobs:
+  lint-client:
+    name: Lint Client
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+          check-latest: true
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          release: true
+          install: base-devel mingw-w64-x86_64-clang
+      - name: Install Task
+        uses: arduino/setup-task@v2
+      - name: Run Code Linter
+        run: task lint:ci || true
+  build-client:
+    name: Build Client
+    needs:
+      - lint-client
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        os_arch:
+          - { os: windows, arch: amd64 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+          check-latest: true
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          release: true
+          install: base-devel mingw-w64-x86_64-clang
+      - name: Install Task
+        uses: arduino/setup-task@v2
+      - name: Build
+        env:
+          GOARCH: ${{matrix.os_arch.arch}}
+          GOOS: ${{matrix.os_arch.os}}
+        run: task build:client
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lanix
+          path: ./bin/client/lanix_${{matrix.os_arch.os}}_${{matrix.os_arch.arch}}.exe
+          retention-days: 3
