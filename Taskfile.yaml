@@ -1,7 +1,7 @@
 version: "3"
 
 vars:
-  GOLANGCI_LINT_VERSION: v1.62.0
+  GOLANGCI_LINT_VERSION: v1.62.2
   COMP_TIME:
     sh: printf 'constant.compileTime=%s' "$(date -u -Iseconds)"
 

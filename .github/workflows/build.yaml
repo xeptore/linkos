@@ -55,6 +55,26 @@ jobs:
         uses: arduino/setup-task@v2
       - name: Run Code Linter
         run: task lint:ci
+  lint-server:
+    name: Lint Server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+          check-latest: true
+      - name: Install Task
+        uses: arduino/setup-task@v2
+      - name: Run Code Linter
+        run: task lint:ci
   build-client:
     name: Build Client
     runs-on: windows-latest
@@ -100,16 +120,19 @@ jobs:
           CC: ${{ steps.clang.outputs.dir }}\clang
           CXX: ${{ steps.clang.outputs.dir }}\clang++
         run: task build:client
+      - name: ZIP Artifacts
+        run: Compress-Archive -Path .\bin\client -DestinationPath client_${{ matrix.os_arch.os }}_${{ matrix.os_arch.arch }}.zip
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linkos
-          path: ./bin/client/
+          name: client_${{ matrix.os_arch.os }}_${{ matrix.os_arch.arch }}.zip
+          path: ./client_${{ matrix.os_arch.os }}_${{ matrix.os_arch.arch }}.zip
+          compression-level: 0
           retention-days: 3
   build-server:
     name: Build Server
     runs-on: ubuntu-latest
-    needs: lint-client
+    needs: lint-server
     permissions:
       contents: read
     steps:
@@ -127,9 +150,12 @@ jobs:
         uses: arduino/setup-task@v2
       - name: Build
         run: task build:server
+      - name: Tar Artifacts
+        run: tar -cvf server.tar ./bin/server/
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linkos
-          path: ./bin/server/
+          name: server.tar
+          path: ./server.tar
+          compression-level: 0
           retention-days: 3
