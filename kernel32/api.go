@@ -3,6 +3,7 @@
 package kernel32
 
 import (
+	"errors"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -31,7 +32,7 @@ func boolToUintptr(b bool) uintptr {
 
 func WaitForMultipleObjects(handles []windows.Handle, waitAll bool, timeout uint32) (uint32, error) {
 	ret, _, err := waitForMultipleObjects.Call(uintptr(len(handles)), uintptr(unsafe.Pointer(&handles[0])), boolToUintptr(waitAll), uintptr(timeout))
-	if err == windows.ERROR_SUCCESS {
+	if errors.Is(err, windows.ERROR_SUCCESS) {
 		err = nil
 	}
 	return uint32(ret), err
@@ -52,7 +53,7 @@ func CreateEvent(manualReset bool, initialState bool, name string) (windows.Hand
 	}
 
 	ret, _, err := createEventW.Call(0, boolToUintptr(manualReset), boolToUintptr(initialState), uintptr(unsafe.Pointer(namePtr)))
-	if err == windows.ERROR_SUCCESS {
+	if errors.Is(err, windows.ERROR_SUCCESS) {
 		err = nil
 	}
 

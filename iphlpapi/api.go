@@ -11,6 +11,7 @@ package iphlpapi
 import "C"
 
 import (
+	"errors"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -27,13 +28,12 @@ func InitializeUnicastIpAddressEntry() (row C.MIB_UNICASTIPADDRESS_ROW) {
 	return
 }
 
-func CreateUnicastIpAddressEntry(row *C.MIB_UNICASTIPADDRESS_ROW) (err error) {
+func CreateUnicastIpAddressEntry(row *C.MIB_UNICASTIPADDRESS_ROW) error {
 	ret, _, _ := createUnicastIpAddressEntry.Call(uintptr(unsafe.Pointer(row)))
-	err = windows.Errno(ret)
-	if err == windows.ERROR_SUCCESS {
-		err = nil
+	if err := windows.Errno(ret); !errors.Is(err, windows.ERROR_SUCCESS) {
+		return err
 	}
-	return
+	return nil
 }
 
 func SetAdapterIPv4(luid uint64, ip []byte, subnet int) (err error) {

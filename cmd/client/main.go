@@ -37,7 +37,7 @@ func main() {
 	cfg, err := config.Load(logger)
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
-			if err := os.WriteFile("linkos.ini", linkos.ConfigFileTemplateContent, 0o0644); nil != err {
+			if err := os.WriteFile("linkos.ini", linkos.ConfigFileTemplateContent, 0o0600); nil != err {
 				logger.Error("Config file was not found. Tried creating a template config file but did not succeeded.")
 				return
 			}
@@ -235,7 +235,7 @@ func filterOutgoingPacket(logger *zap.Logger, p tun.Packet) (bool, error) {
 		panic(fmt.Sprintf("unexpected packet version: %d", v))
 	}
 
-	packet := gopacket.NewPacket(p, decoder, gopacket.DecodeOptions{Lazy: true, NoCopy: true})
+	packet := gopacket.NewPacket(p, decoder, gopacket.DecodeOptions{Lazy: true, NoCopy: true}) //nolint:exhaustruct
 	if err := packet.ErrorLayer(); nil != err {
 		return false, fmt.Errorf("failed to parse packet with length %d: %v", len(p), err.Error())
 	}
@@ -251,8 +251,7 @@ func filterOutgoingPacket(logger *zap.Logger, p tun.Packet) (bool, error) {
 		logger.Debug("Detected IPv4 packet", zap.String("src", ip.SrcIP.String()), zap.String("dst", ip.DstIP.String()))
 
 		if layer := packet.TransportLayer(); nil != layer {
-			switch layer := layer.(type) {
-			case *layers.UDP:
+			if layer, ok := layer.(*layers.UDP); ok {
 				logger.Debug("Detected UDP packet", zap.String("src_port", layer.SrcPort.String()), zap.String("dst_port", layer.DstPort.String()))
 				if layer.DstPort == 5353 && layer.SrcPort == 5353 && ip.DstIP.String() == "224.0.0.251" { // mDNS
 					logger.Debug("Skipping mDNS packet")

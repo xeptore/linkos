@@ -95,8 +95,8 @@ func (t *Tun) Up(ctx context.Context) (Packets, error) {
 			default:
 				pckt, err := t.session.ReceivePacket()
 				if nil != err {
-					switch err {
-					case windows.ERROR_NO_MORE_ITEMS:
+					switch {
+					case errors.Is(err, windows.ERROR_NO_MORE_ITEMS):
 						res, err := kernel32.WaitForMultipleObjects([]windows.Handle{readEvent, t.stopEvent}, false, windows.INFINITE)
 						switch res {
 						case windows.WAIT_OBJECT_0:
@@ -106,10 +106,10 @@ func (t *Tun) Up(ctx context.Context) (Packets, error) {
 						default:
 							out <- mo.Err[Packet](fmt.Errorf("unexpected result from wait to events: %v", err))
 						}
-					case windows.ERROR_HANDLE_EOF:
+					case errors.Is(err, windows.ERROR_HANDLE_EOF):
 						out <- mo.Err[Packet](fmt.Errorf("expected StopEvent to be set before closing the session: %v", err))
 						return
-					case windows.ERROR_INVALID_DATA:
+					case errors.Is(err, windows.ERROR_INVALID_DATA):
 						out <- mo.Err[Packet](errors.New("send ring corrupt"))
 						return
 					default:
@@ -175,9 +175,5 @@ func (t *Tun) Write(p []byte) (n int, err error) {
 
 func (t *Tun) waitForExit(dur uint32) bool {
 	res, _ := kernel32.WaitForSingleObject(t.stopEvent, dur)
-	switch res {
-	case windows.WAIT_OBJECT_0:
-		return true
-	}
-	return false
+	return res == windows.WAIT_OBJECT_0
 }
