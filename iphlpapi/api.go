@@ -21,7 +21,7 @@ var (
 )
 
 func InitializeUnicastIpAddressEntry() (row C.MIB_UNICASTIPADDRESS_ROW) {
-	initializeUnicastIpAddressEntry.Call(uintptr(unsafe.Pointer(&row)))
+	_, _, _ = initializeUnicastIpAddressEntry.Call(uintptr(unsafe.Pointer(&row)))
 	return
 }
 
