@@ -41,11 +41,11 @@ func Load(logger *zap.Logger) (*Config, error) {
 
 func (c Config) validate() error {
 	if ip := net.ParseIP(c.IP); ip == nil {
-		return fmt.Errorf("ip is not a valid IP address")
+		return errors.New("ip is not a valid IP address")
 	}
 
 	if _, err := net.ResolveUDPAddr("udp", c.ServerAddr); nil != err {
-		return fmt.Errorf("server_address must be a valid address")
+		return errors.New("server_address must be a valid address")
 	}
 
 	return nil

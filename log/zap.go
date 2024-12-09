@@ -8,6 +8,7 @@ import (
 )
 
 func New() (*zap.Logger, error) {
+	//nolint:exhaustruct
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "timestamp",
 		LevelKey:       "level",
@@ -22,6 +23,7 @@ func New() (*zap.Logger, error) {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
+	//nolint:exhaustruct
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(zap.DebugLevel),
 		Development:      true,

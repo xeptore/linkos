@@ -24,7 +24,6 @@ var (
 )
 
 func main() {
-
 	serverAddr, err := net.ResolveUDPAddr("udp", serverAddress)
 	if nil != err {
 		log.Fatalf("Failed to resolve server address: %v", err)
