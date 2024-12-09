@@ -44,10 +44,13 @@ jobs:
           check-latest: true
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
+        id: msys2
         with:
+          msystem: CLANG64
+          location: D:\msys2
           update: true
           release: true
-          install: base-devel mingw-w64-x86_64-clang
+          install: base-devel mingw-w64-clang-x86_64-clang
       - name: Install Task
         uses: arduino/setup-task@v2
       - name: Run Code Linter
