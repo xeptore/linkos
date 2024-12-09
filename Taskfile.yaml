@@ -34,6 +34,7 @@ tasks:
       - task: clear-build-dir
       - cmd: cp ./wintun.dll ./bin
       - cmd: |-
+          go env
           go build \
             -a \
             -buildvcs=true \

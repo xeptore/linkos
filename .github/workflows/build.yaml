@@ -45,19 +45,17 @@ jobs:
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: CLANG64
           update: true
           release: true
           install: base-devel mingw-w64-x86_64-clang
       - name: Install Task
         uses: arduino/setup-task@v2
       - name: Run Code Linter
-        run: task lint:ci || true
+        run: task lint:ci
   build-client:
     name: Build Client
-    needs:
-      - lint-client
     runs-on: windows-latest
+    needs: lint-client
     permissions:
       contents: read
     strategy:
@@ -77,21 +75,31 @@ jobs:
           check-latest: true
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
+        id: msys2
         with:
           msystem: CLANG64
+          location: D:\msys2
           update: true
           release: true
-          install: base-devel mingw-w64-x86_64-clang
+          install: base-devel mingw-w64-clang-x86_64-clang
+      - name: Get Clang Path
+        id: clang
+        run: |-
+          echo "dir=${{ steps.msys2.outputs.msys2-location }}\clang64\bin" >> $env:GITHUB_OUTPUT
+          ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang --version
+          ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang++ --version
       - name: Install Task
         uses: arduino/setup-task@v2
       - name: Build
         env:
-          GOARCH: ${{matrix.os_arch.arch}}
-          GOOS: ${{matrix.os_arch.os}}
+          GOARCH: ${{ matrix.os_arch.arch }}
+          GOOS: ${{ matrix.os_arch.os }}
+          CC: ${{ steps.clang.outputs.dir }}\clang
+          CXX: ${{ steps.clang.outputs.dir }}\clang++
         run: task build:client
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: linkos
-          path: ./bin/client/linkos_${{matrix.os_arch.os}}_${{matrix.os_arch.arch}}.exe
+          path: ./bin/client/linkos_${{ matrix.os_arch.os }}_${{ matrix.os_arch.arch }}.exe
           retention-days: 3
