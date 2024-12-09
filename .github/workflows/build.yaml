@@ -81,10 +81,6 @@ jobs:
     needs: lint-client
     permissions:
       contents: read
-    strategy:
-      matrix:
-        os_arch:
-          - { os: windows, arch: amd64 }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,18 +111,21 @@ jobs:
         uses: arduino/setup-task@v2
       - name: Build
         env:
-          GOARCH: ${{ matrix.os_arch.arch }}
-          GOOS: ${{ matrix.os_arch.os }}
           CC: ${{ steps.clang.outputs.dir }}\clang
           CXX: ${{ steps.clang.outputs.dir }}\clang++
         run: task build:client
       - name: ZIP Artifacts
-        run: Compress-Archive -Path .\bin\client -DestinationPath client_${{ matrix.os_arch.os }}_${{ matrix.os_arch.arch }}.zip
+        run: Compress-Archive -Path .\bin\client -DestinationPath client.zip
+      - name: Get OS & Arch
+        id: os_arch
+        run: |-
+          echo "os=$(go env GOOS)" >> $env:GITHUB_OUTPUT
+          echo "arch=$(go env GOARCH)" >> $env:GITHUB_OUTPUT
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: client_${{ matrix.os_arch.os }}_${{ matrix.os_arch.arch }}.zip
-          path: ./client_${{ matrix.os_arch.os }}_${{ matrix.os_arch.arch }}.zip
+          name: client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip
+          path: ./client.zip
           compression-level: 0
           retention-days: 3
   build-server:
@@ -152,10 +151,15 @@ jobs:
         run: task build:server
       - name: Tar Artifacts
         run: tar -cvf server.tar ./bin/server/
+      - name: Get OS & Arch
+        id: os_arch
+        run: |-
+          echo "os=$(go env GOOS)" >> $GITHUB_OUTPUT
+          echo "arch=$(go env GOARCH)" >> $GITHUB_OUTPUT
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: server.tar
+          name: server_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.tar
           path: ./server.tar
           compression-level: 0
           retention-days: 3

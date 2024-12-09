@@ -27,11 +27,6 @@ tasks:
       CGO_ENABLED: 1
       CC: clang
       CXX: clang++
-    vars:
-      GOOS:
-        sh: go env GOOS
-      GOARCH:
-        sh: go env GOARCH
     cmds:
       - task: clear-build-dir
       - cmd: |-
@@ -40,7 +35,7 @@ tasks:
             -buildvcs=true \
             -trimpath \
             -ldflags="-compressdwarf=true -extldflags=-static -s -w -buildid=''" \
-            -o ./bin/client/linkos_{{.GOOS}}_{{.GOARCH}}.exe \
+            -o ./bin/client/linkos.exe \
             ./cmd/client
 
   build:server:
