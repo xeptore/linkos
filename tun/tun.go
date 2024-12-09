@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"time"
 
 	"github.com/samber/mo"
+	"go.uber.org/zap"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 
@@ -30,50 +30,53 @@ type Tun struct {
 	adapter   *wintun.Adapter
 	session   wintun.Session
 	stopEvent windows.Handle
+	logger    *zap.Logger
 }
 
-func New() (*Tun, error) {
-	log.Printf("Using wintun version %s.\n", wintun.Version())
+func New(logger *zap.Logger) (*Tun, error) {
+	logger.Debug("Loading wintun", zap.String("version", wintun.Version()))
 
 	guid, err := windows.GUIDFromString(TunGUID)
 	if nil != err {
-		return nil, fmt.Errorf("failed to parse adapter GUID: %v", err)
+		return nil, fmt.Errorf("tun: failed to parse adapter GUID: %v", err)
 	}
 
-	log.Println("Creating adapter...")
-	adapter, err := wintun.CreateAdapter("linkos", "linkos", &guid)
+	logger.Debug("Creating adapter.", zap.String("guid", TunGUID))
+	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
-		return nil, fmt.Errorf("failed to create linkos adapter: %v", err)
+		return nil, fmt.Errorf("tun: failed to create linkos adapter: %v", err)
 	}
+	logger.Debug("Adapter created.")
 
-	log.Println("Starting session...")
+	logger.Debug("Starting session.")
 	session, err := adapter.StartSession(TunRingSize)
 	if nil != err {
-		return nil, fmt.Errorf("failed to start session: %v", err)
+		return nil, fmt.Errorf("tun: failed to start session: %v", err)
 	}
-	log.Println("Session successfully created.")
+	logger.Debug("Session successfully created.")
 
 	stopEvent, err := kernel32.CreateEvent(true, false, "StopEvent")
 	if nil != err {
-		return nil, fmt.Errorf("failed to create kernel StopEvent: %v", err)
+		return nil, fmt.Errorf("tun: failed to create kernel StopEvent: %v", err)
 	}
 
 	return &Tun{
 		adapter:   adapter,
 		session:   session,
 		stopEvent: stopEvent,
+		logger:    logger,
 	}, nil
 }
 
 func (t *Tun) AssignIPv4(ipv4 string) error {
 	ip := net.ParseIP(ipv4)
 	if nil == ip {
-		return errors.New("failed to parse adapter IP address")
+		return errors.New("tun: failed to parse adapter IP address")
 	}
 	if err := iphlpapi.SetAdapterIPv4(t.adapter.LUID(), ip.To4(), 24); nil != err {
 		return fmt.Errorf("failed to set adapter IP address: %v", err)
 	}
-	log.Println("Successfully assigned adapter IP address.")
+	t.logger.Debug("Successfully assigned adapter IP address.")
 	return nil
 }
 
@@ -129,23 +132,32 @@ func (t *Tun) ReleasePacketBuffer(p Packet) {
 }
 
 func (t *Tun) Down() error {
-	kernel32.SetEvent(t.stopEvent)
-	defer kernel32.CloseHandle(t.stopEvent)
+	if err := kernel32.SetEvent(t.stopEvent); nil != err {
+		return fmt.Errorf("tun: failed to set StopEvent: %v", err)
+	}
+	defer func() {
+		t.logger.Debug("Closing StopEvent handle.")
+		if err := kernel32.CloseHandle(t.stopEvent); nil != err {
+			t.logger.Debug("Failed to close StopEvent handle.", zap.Error(err))
+		} else {
+			t.logger.Debug("Successfully closed StopEvent handle.")
+		}
+	}()
 
 	stopWaitDur := time.Second * 5
 	if exited := t.waitForExit(uint32(stopWaitDur.Milliseconds())); !exited {
-		return fmt.Errorf("timed out waiting for receive ring stop after %s", stopWaitDur.String())
+		return fmt.Errorf("tun: timed out waiting for receive ring stop after %s", stopWaitDur.String())
 	}
 
-	log.Println("Ending session...")
+	t.logger.Debug("Ending session")
 	t.session.End()
-	log.Println("Successfully ended session")
+	t.logger.Debug("Successfully ended session")
 
-	log.Println("Closing adapter")
+	t.logger.Debug("Closing adapter")
 	if err := t.adapter.Close(); nil != err {
-		return err
+		return fmt.Errorf("tun: failed to close adapter: %v", err)
 	}
-	log.Println("Successfully closed adapter.")
+	t.logger.Debug("Successfully closed adapter.")
 	return nil
 }
 

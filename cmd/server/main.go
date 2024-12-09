@@ -20,18 +20,10 @@ type Client struct {
 var (
 	clients     = make(map[string]*Client)
 	clientsLock = sync.Mutex{}
-	subnet      *net.IPNet
-	broadcastIP net.IP
+	broadcastIP = net.ParseIP("10.0.0.255")
 )
 
 func main() {
-	var err error
-	_, subnet, err = net.ParseCIDR(vpnSubnetCIDR)
-	if nil != err {
-		log.Fatalf("Failed to parse subnet: %v", err)
-	}
-
-	broadcastIP = net.ParseIP("10.0.0.255")
 
 	serverAddr, err := net.ResolveUDPAddr("udp", serverAddress)
 	if nil != err {
