@@ -147,7 +147,7 @@ func (t *Tun) Down() error {
 	}()
 
 	stopWaitDur := time.Second * 5
-	if exited := t.waitForExit(uint32(stopWaitDur.Milliseconds())); !exited {
+	if exited := t.waitForExit(uint32(stopWaitDur.Milliseconds())); !exited { //nolint:gosec
 		return fmt.Errorf("tun: timed out waiting for receive ring stop after %s", stopWaitDur.String())
 	}
 
