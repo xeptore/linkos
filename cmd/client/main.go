@@ -14,10 +14,10 @@ import (
 	"github.com/google/gopacket/layers"
 	"go.uber.org/zap"
 
-	"github.com/xeptore/lanix"
-	"github.com/xeptore/lanix/config"
-	"github.com/xeptore/lanix/log"
-	"github.com/xeptore/lanix/tun"
+	"github.com/xeptore/linkos"
+	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/log"
+	"github.com/xeptore/linkos/tun"
 )
 
 func main() {
@@ -35,11 +35,11 @@ func main() {
 	cfg, err := config.Load(logger)
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
-			if err := os.WriteFile("lanix.ini", lanix.ConfigFileTemplateContent, 0o0644); nil != err {
+			if err := os.WriteFile("linkos.ini", linkos.ConfigFileTemplateContent, 0o0644); nil != err {
 				logger.Error("Config file was not found. Tried creating a template config file but did not succeeded.")
 				return
 			}
-			logger.Error("Config file was not found. A template is created with name lanix.ini. You should fill with proper values.")
+			logger.Error("Config file was not found. A template is created with name linkos.ini. You should fill with proper values.")
 			return
 		}
 		logger.Error("Failed to load config file", zap.Error(err))

@@ -39,7 +39,7 @@ tasks:
             -buildvcs=true \
             -trimpath \
             -ldflags="-compressdwarf=true -extldflags=-static -s -w -buildid=''" \
-            -o ./bin/client/lanix_{{.GOOS}}_{{.GOARCH}}.exe \
+            -o ./bin/client/linkos_{{.GOOS}}_{{.GOARCH}}.exe \
             ./cmd/client
 
   lint:

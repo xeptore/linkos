@@ -16,7 +16,7 @@ type Config struct {
 }
 
 func Load(logger *zap.Logger) (*Config, error) {
-	cfg, err := ini.Load("lanix.ini")
+	cfg, err := ini.Load("linkos.ini")
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, os.ErrNotExist

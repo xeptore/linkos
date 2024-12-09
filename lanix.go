@@ -1,8 +1,8 @@
-package lanix
+package linkos
 
 import (
 	_ "embed"
 )
 
-//go:embed lanix.ini
+//go:embed linkos.ini
 var ConfigFileTemplateContent []byte

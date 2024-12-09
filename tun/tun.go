@@ -12,8 +12,8 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 
-	"github.com/xeptore/lanix/iphlpapi"
-	"github.com/xeptore/lanix/kernel32"
+	"github.com/xeptore/linkos/iphlpapi"
+	"github.com/xeptore/linkos/kernel32"
 )
 
 const (
@@ -41,9 +41,9 @@ func New() (*Tun, error) {
 	}
 
 	log.Println("Creating adapter...")
-	adapter, err := wintun.CreateAdapter("Lanix", "Lanix", &guid)
+	adapter, err := wintun.CreateAdapter("linkos", "linkos", &guid)
 	if nil != err {
-		return nil, fmt.Errorf("failed to create Lanix adapter: %v", err)
+		return nil, fmt.Errorf("failed to create linkos adapter: %v", err)
 	}
 
 	log.Println("Starting session...")
