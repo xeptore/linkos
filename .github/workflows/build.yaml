@@ -1,13 +1,8 @@
 name: Build
 on:
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
 concurrency:
   group: ${{ github.workflow }}/${{ github.ref_type }}/${{ github.ref_name }}
   cancel-in-progress: true
@@ -211,3 +206,110 @@ jobs:
           path: ./server.tar
           compression-level: 0
           retention-days: 3
+  tag:
+    name: Generate Tag & Release Info
+    needs: 
+      - build-client
+      - build-server
+    permissions:
+      contents: write
+    outputs:
+      no_continue: ${{ steps.generate.outputs.no_continue }}
+      upstream_tag_name: ${{ steps.generate.outputs.upstream_tag_name }}
+      upstream_release_name: ${{ steps.generate.outputs.upstream_release_name }}
+      tag_name: ${{ steps.generate.outputs.tag_name }}
+      release_name: ${{ steps.generate.outputs.release_name }}
+      draft: ${{ steps.generate.outputs.draft }}
+      prerelease: ${{ steps.generate.outputs.prerelease }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate
+        id: generate
+        run: |-
+          set -x
+          tag=$(date -u -d @$(git show -s --format=%ct ${{ github.sha }}) +'%Y%m%d%H%M')
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+      - name: Create
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          fetch_all_tags: true
+          create_annotated_tag: true
+          tag_prefix: "v"
+          custom_tag: ${{ steps.generate.outputs.tag }}
+  release:  
+    name: Release
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    needs:
+      - tag
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Client windows_amd64 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: client_windows_amd64.zip
+      - name: Download Server linux_amd64 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: server_linux_amd64.tar
+      - name: Release
+        uses: softprops/action-gh-release@v2.1.0
+        continue-on-error: true
+        id: release_try_0
+        with:
+          name: ${{ needs.tag.outputs.tag_name }}
+          prerelease: false
+          draft: false
+          tag_name: ${{ needs.tag.outputs.tag_name }}
+          fail_on_unmatched_files: true
+          files: |-
+            client_windows_amd64.zip
+            server_linux_amd64.tar
+      - name: Release (Retry 1)
+        uses: softprops/action-gh-release@v2.1.0
+        continue-on-error: true
+        if: steps.release_try_0.outcome == 'failure'
+        id: release_try_1
+        with:
+          name: ${{ needs.tag.outputs.tag_name }}
+          prerelease: false
+          draft: false
+          tag_name: ${{ needs.tag.outputs.tag_name }}
+          fail_on_unmatched_files: true
+          files: |-
+            client_windows_amd64.zip
+            server_linux_amd64.tar
+      - name: Release (Retry 2)
+        uses: softprops/action-gh-release@v2.1.0
+        continue-on-error: true
+        if: steps.release_try_1.outcome == 'failure'
+        id: release_try_2
+        with:
+          name: ${{ needs.tag.outputs.tag_name }}
+          prerelease: false
+          draft: false
+          tag_name: ${{ needs.tag.outputs.tag_name }}
+          fail_on_unmatched_files: true
+          files: |-
+            client_windows_amd64.zip
+            server_linux_amd64.tar
+      - name: Release (Retry 3)
+        uses: softprops/action-gh-release@v2.1.0
+        continue-on-error: false
+        if: steps.release_try_2.outcome == 'failure'
+        id: release_try_3
+        with:
+          name: ${{ needs.tag.outputs.tag_name }}
+          prerelease: false
+          draft: false
+          tag_name: ${{ needs.tag.outputs.tag_name }}
+          fail_on_unmatched_files: true
+          files: |-
+            client_windows_amd64.zip
+            server_linux_amd64.tar
