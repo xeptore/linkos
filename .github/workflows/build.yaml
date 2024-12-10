@@ -55,7 +55,11 @@ jobs:
       - name: Install Task
         uses: arduino/setup-task@v2
       - name: Run Code Linter
-        run: task lint:ci
+        run: |-
+            task lint:local:fix || true
+            git status
+            git diff
+            task lint:ci
   lint-server:
     name: Lint Server
     runs-on: ubuntu-24.04
