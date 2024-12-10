@@ -244,14 +244,13 @@ jobs:
       - tag
     runs-on: ubuntu-24.04
     steps:
-      - name: Download Client windows_amd64 Artifact
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: client_windows_amd64.zip
-      - name: Download Server linux_amd64 Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: server_linux_amd64.tar
+          merge-multiple: true
+      - name: Debug
+        run: |-
+          ls -halu
       - name: Release
         uses: softprops/action-gh-release@v2.1.0
         continue-on-error: true
