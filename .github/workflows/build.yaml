@@ -117,20 +117,25 @@ jobs:
           CC: ${{ steps.clang.outputs.dir }}\clang
           CXX: ${{ steps.clang.outputs.dir }}\clang++
         run: task build:client
-      - name: Update Manifest
+      - name: Prepare Icons
         shell: msys2 {0}
         run: |-
           set -ex
 
-          # From: https://tewarid.github.io/2020/09/03/create-a-windows-icon-file-using-imagemagick.html
-          convert ./res/linkos.png -resize 16x16   -depth 32 ./res/16-32.png
-          convert ./res/linkos.png -resize 32x32   -depth 32 ./res/32-32.png
-          convert ./res/linkos.png -resize 48x48   -depth 32 ./res/48-32.png
-          convert ./res/linkos.png -resize 256x256 -depth 32 ./res/256-32.png
-          convert ./res/16-32.png ./res/32-32.png ./res/48-32.png ./res/256-32.png ./res/linkos.ico
-
-          wget https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe -O rcedit.exe
-          ./rcedit ./bin/client/linkos.exe --set-icon ./res/linkos.ico --set-requested-execution-level requireAdministrator
+          # Commands from: https://tewarid.github.io/2020/09/03/create-a-windows-icon-file-using-imagemagick.html
+          # Sizes from: https://learn.microsoft.com/en-us/windows/apps/design/style/iconography/app-icon-construction
+          magick convert ./res/linkos.png -resize 16x16 -depth 32 -colors 256 -alpha on ./res/16.png
+          magick convert ./res/linkos.png -resize 32x32 -depth 32 -colors 256 -alpha on ./res/32.png
+          magick convert ./res/linkos.png -resize 48x48 -depth 32 -colors 256 -alpha on ./res/48.png
+          magick convert ./res/linkos.png -resize 64x64 -depth 32 -colors 256 -alpha on ./res/64.png
+          magick convert ./res/linkos.png -resize 128x128 -depth 32 -colors 256 -alpha on ./res/128.png
+          magick convert ./res/linkos.png -resize 256x256 -depth 32 -colors 256 -alpha on ./res/256.png
+          magick convert ./res/16.png ./res/32.png ./res/48.png ./res/64.png ./res/128.png ./res/256.png ./res/linkos.ico
+      - name: Set Manifest
+        run: |-
+          set GOBIN=^(pwd)^
+          go install github.com/akavel/rsrc@v0.10.2
+          ./rsrc.exe -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
       - name: Compress Executable
         shell: msys2 {0}
         run: |
