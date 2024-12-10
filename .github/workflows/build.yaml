@@ -130,20 +130,6 @@ jobs:
         run: |-
           go install github.com/akavel/rsrc@v0.10.2
           & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
-      - name: Compress Executable
-        shell: msys2 {0}
-        run: |
-          set -ex
-          VERSION=4.2.4
-          workdir=$(pwd)
-          temp_dir=$(mktemp -d)
-          cd "$temp_dir"
-          wget -q "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-win64.zip"
-          unzip "upx-${VERSION}-win64.zip"
-          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --no-backup "${workdir}/bin/client/linkos.exe"
-          "./upx-${VERSION}-win64/upx.exe" --test "${workdir}/bin/client/linkos.exe"
-          cd -
-          rm -rfv "${temp_dir}"
       - name: Get OS & Arch
         id: os_arch
         run: |-
