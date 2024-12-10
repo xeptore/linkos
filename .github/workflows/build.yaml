@@ -144,18 +144,18 @@ jobs:
           "./upx-${VERSION}-win64/upx.exe" --test "${workdir}/bin/client/linkos.exe"
           cd -
           rm -rfv "${temp_dir}"
-      - name: ZIP Artifacts
-        run: Compress-Archive -Path .\bin\client -DestinationPath client.zip
       - name: Get OS & Arch
         id: os_arch
         run: |-
           echo "os=$(go env GOOS)" >> $env:GITHUB_OUTPUT
           echo "arch=$(go env GOARCH)" >> $env:GITHUB_OUTPUT
+      - name: ZIP Artifacts
+        run: Compress-Archive -Path .\bin\client -DestinationPath client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip
-          path: ./client.zip
+          path: ./client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip
           compression-level: 0
           retention-days: 3
   build-server:
@@ -192,18 +192,18 @@ jobs:
           "./upx-${VERSION}-amd64_linux/upx" --test "${workdir}/bin/server/linkos"
           cd -
           rm -rfv "${temp_dir}"
-      - name: Tar Artifacts
-        run: tar -cvf server.tar ./bin/server/
       - name: Get OS & Arch
         id: os_arch
         run: |-
           echo "os=$(go env GOOS)" >> $GITHUB_OUTPUT
           echo "arch=$(go env GOARCH)" >> $GITHUB_OUTPUT
+      - name: Tar Artifacts
+        run: tar -cvf server_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.tar ./bin/server/
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: server_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.tar
-          path: ./server.tar
+          path: ./server_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.tar
           compression-level: 0
           retention-days: 3
   tag:
@@ -250,7 +250,7 @@ jobs:
           merge-multiple: true
       - name: Debug
         run: |-
-          ls -halu
+          ls -R
       - name: Release
         uses: softprops/action-gh-release@v2.1.0
         continue-on-error: true
