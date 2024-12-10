@@ -58,7 +58,7 @@ tasks:
             -buildvcs=true \
             -trimpath \
             -ldflags="-compressdwarf=true -extldflags=-static -s -w -buildid=''" \
-            -o ./bin/server/linkos_{{.GOOS}}_{{.GOARCH}}.exe \
+            -o ./bin/server/linkos \
             ./cmd/server
 
   lint:
