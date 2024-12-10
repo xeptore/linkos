@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 
-	"go.uber.org/zap"
 	"gopkg.in/ini.v1"
 )
 
@@ -15,7 +14,7 @@ type Config struct {
 	IP         string
 }
 
-func Load(logger *zap.Logger) (*Config, error) {
+func Load() (*Config, error) {
 	cfg, err := ini.Load("linkos.ini")
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {

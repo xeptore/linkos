@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 
 	"github.com/xeptore/linkos"
@@ -43,13 +44,8 @@ func run() (err error) {
 	if nil != err {
 		return fmt.Errorf("failed to create logger: %v", err)
 	}
-	defer func() {
-		if syncErr := logger.Sync(); nil != syncErr {
-			err = fmt.Errorf("failed to sync logger: %v", syncErr)
-		}
-	}()
 
-	cfg, err := config.Load(logger)
+	cfg, err := config.Load()
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
 			if err := os.WriteFile("linkos.ini", linkos.ConfigFileTemplateContent, 0o0600); nil != err {
@@ -64,7 +60,7 @@ func run() (err error) {
 	defer stop()
 
 	logger.Debug("Initializing VPN tunnel")
-	t, err := tun.New(logger.With(zap.String("module", "tune")))
+	t, err := tun.New(logger.WithField("module", "tune").Dup().Logger)
 	if nil != err {
 		return fmt.Errorf("failed to create VPN tunnel: %v", err)
 	}
@@ -139,7 +135,7 @@ func run() (err error) {
 		t:       t,
 		conn:    conn,
 		packets: packets,
-		logger:  logger.With(zap.String("module", "client")),
+		logger:  logger.WithField("module", "client").Dup().Logger,
 	}
 
 	go client.handleOutgoing(ctx, &wg)
@@ -158,12 +154,12 @@ type Client struct {
 	t       *tun.Tun
 	conn    *net.UDPConn
 	packets tun.Packets
-	logger  *zap.Logger
+	logger  *logrus.Logger
 }
 
 func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	logger := c.logger.With(zap.String("worker", "outgoing"))
+	logger := c.logger.WithField("worker", "outgoing").Dup().Logger
 
 	for {
 		select {
@@ -195,7 +191,7 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 
 func (c *Client) handleIncoming(wg *sync.WaitGroup) {
 	defer wg.Done()
-	logger := c.logger.With(zap.String("worker", "incoming"))
+	logger := c.logger.WithField("worker", "incoming").Dup().Logger
 
 	const bufferSize = 2048
 	buffer := make([]byte, bufferSize)
@@ -224,7 +220,7 @@ func determineVersion(packet []byte) (int, error) {
 	return int(packet[0] >> 4), nil
 }
 
-func filterOutgoingPacket(logger *zap.Logger, p tun.Packet) (bool, error) {
+func filterOutgoingPacket(logger *logrus.Logger, p tun.Packet) (bool, error) {
 	v, err := determineVersion(p)
 	if nil != err {
 		return false, err

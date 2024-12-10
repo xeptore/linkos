@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/samber/mo"
+	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
@@ -32,10 +33,10 @@ type Tun struct {
 	adapter   *wintun.Adapter
 	session   wintun.Session
 	stopEvent windows.Handle
-	logger    *zap.Logger
+	logger    *logrus.Logger
 }
 
-func New(logger *zap.Logger) (*Tun, error) {
+func New(logger *logrus.Logger) (*Tun, error) {
 	logger.Debug("Loading wintun", zap.String("version", wintun.Version()))
 
 	guid, err := windows.GUIDFromString(TunGUID)
