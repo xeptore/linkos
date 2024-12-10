@@ -107,11 +107,6 @@ jobs:
           ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang++ --version
       - name: Install Task
         uses: arduino/setup-task@v2
-      - name: Build
-        env:
-          CC: ${{ steps.clang.outputs.dir }}\clang
-          CXX: ${{ steps.clang.outputs.dir }}\clang++
-        run: task build:client
       - name: Prepare Icons
         shell: msys2 {0}
         run: |-
@@ -130,6 +125,24 @@ jobs:
         run: |-
           go install github.com/akavel/rsrc@v0.10.2
           & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
+      - name: Build
+        env:
+          CC: ${{ steps.clang.outputs.dir }}\clang
+          CXX: ${{ steps.clang.outputs.dir }}\clang++
+        run: task build:client
+      - name: Compress Executable
+        shell: msys2 {0}
+        run: |
+          set -ex
+
+          VERSION=4.2.4
+          temp_dir=$(mktemp -d)
+          cd "$temp_dir"
+          wget -q "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-win64.zip"
+          unzip "upx-${VERSION}-win64.zip"
+          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --no-backup "${{ github.workspace }}/bin/client/linkos.exe"
+          "./upx-${VERSION}-win64/upx.exe" --test "${{ github.workspace }}/bin/client/linkos.exe"
+          rm -rfv "${temp_dir}"
       - name: Get OS & Arch
         id: os_arch
         run: |-
@@ -170,14 +183,13 @@ jobs:
       - name: Compress Executable
         run: |
           set -ex
+
           VERSION=4.2.4
-          workdir=$(pwd)
           temp_dir=$(mktemp -d)
           cd "$temp_dir"
           wget -qO- "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-amd64_linux.tar.xz" | tar -xJvf - "upx-${VERSION}-amd64_linux/upx"
-          "./upx-${VERSION}-amd64_linux/upx" --no-color --mono --no-progress --ultra-brute --no-backup "${workdir}/bin/server/linkos"
-          "./upx-${VERSION}-amd64_linux/upx" --test "${workdir}/bin/server/linkos"
-          cd -
+          "./upx-${VERSION}-amd64_linux/upx" --no-color --mono --no-progress --ultra-brute --no-backup '${{ github.workspace }}/bin/server/linkos'
+          "./upx-${VERSION}-amd64_linux/upx" --test '${{ github.workspace }}/bin/server/linkos'
           rm -rfv "${temp_dir}"
       - name: Get OS & Arch
         id: os_arch
