@@ -134,7 +134,7 @@ jobs:
       - name: Set Manifest
         run: |-
           go install github.com/akavel/rsrc@v0.10.2
-          & "$(go env GOPATH)\bin\rsrc.exe)" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
+          & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
       - name: Compress Executable
         shell: msys2 {0}
         run: |
