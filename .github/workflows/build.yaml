@@ -133,9 +133,8 @@ jobs:
           magick convert ./res/16.png ./res/32.png ./res/48.png ./res/64.png ./res/128.png ./res/256.png ./res/linkos.ico
       - name: Set Manifest
         run: |-
-          set GOBIN=^(pwd)^
           go install github.com/akavel/rsrc@v0.10.2
-          ./rsrc.exe -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
+          & "$(go env GOPATH)\bin\rsrc.exe)" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
       - name: Compress Executable
         shell: msys2 {0}
         run: |
