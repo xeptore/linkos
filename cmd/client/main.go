@@ -41,11 +41,11 @@ func main() {
 func run() (err error) {
 	logger, err := log.New()
 	if nil != err {
-		return fmt.Errorf("failed to create logger: %v\n", err)
+		return fmt.Errorf("failed to create logger: %v", err)
 	}
 	defer func() {
 		if syncErr := logger.Sync(); nil != syncErr {
-			err = fmt.Errorf("failed to sync logger: %v\n", syncErr)
+			err = fmt.Errorf("failed to sync logger: %v", syncErr)
 		}
 	}()
 
