@@ -23,14 +23,24 @@ import (
 )
 
 func main() {
+	if err := run(); nil != err {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintln(os.Stdout, "Press enter to exit...")
+		fmt.Scanln()
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stdout, "Press enter to exit...")
+	fmt.Scanln()
+}
+
+func run() (err error) {
 	logger, err := log.New()
 	if nil != err {
-		fmt.Printf("Failed to create logger: %v\n", err)
-		return
+		return fmt.Errorf("failed to create logger: %v\n", err)
 	}
 	defer func() {
-		if err := logger.Sync(); nil != err {
-			fmt.Printf("Failed to sync logger: %v\n", err)
+		if syncErr := logger.Sync(); nil != syncErr {
+			err = fmt.Errorf("failed to sync logger: %v\n", syncErr)
 		}
 	}()
 
@@ -38,14 +48,11 @@ func main() {
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
 			if err := os.WriteFile("linkos.ini", linkos.ConfigFileTemplateContent, 0o0600); nil != err {
-				logger.Error("Config file was not found. Tried creating a template config file but did not succeeded.")
-				return
+				return fmt.Errorf("config file was not found. Tried creating a template config file but did not succeeded.")
 			}
-			logger.Error("Config file was not found. A template is created with name linkos.ini. You should fill with proper values.")
-			return
+			return fmt.Errorf("config file was not found. A template is created with name linkos.ini. You should fill with proper values.")
 		}
-		logger.Error("Failed to load config file", zap.Error(err))
-		return
+		return fmt.Errorf("failed to load config file", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -54,15 +61,13 @@ func main() {
 	logger.Debug("Initializing VPN tunnel")
 	t, err := tun.New(logger.With(zap.String("module", "tune")))
 	if nil != err {
-		logger.Error("Failed to create VPN tunnel", zap.Error(err))
-		return
+		return fmt.Errorf("failed to create VPN tunnel", err)
 	}
 	logger.Debug("VPN tunnel initialized")
 
 	logger.Debug("Assigning IP address to tunnel adapter", zap.String("ip", cfg.IP))
 	if err := t.AssignIPv4(cfg.IP); nil != err {
-		logger.Error("Failed to assign IP address to tunnel adapter", zap.Error(err))
-		return
+		return fmt.Errorf("failed to assign IP address to tunnel adapter: %v", err)
 	}
 	logger.Debug("Assigned IP address to tunnel adapter")
 
@@ -78,14 +83,12 @@ func main() {
 	logger.Debug("Bringing up VPN tunnel")
 	packets, err := t.Up(ctx)
 	if nil != err {
-		logger.Error("Failed to bring up VPN interface", zap.Error(err))
-		return
+		return fmt.Errorf("failed to bring up VPN interface", err)
 	}
 	defer func() {
 		logger.Debug("Shutting down VPN tunnel")
-		if err := t.Down(); nil != err {
-			logger.Error("Failed to properly shutdown VPN tunnel", zap.Error(err))
-			return
+		if downErr := t.Down(); nil != downErr {
+			err = fmt.Errorf("failed to properly shutdown VPN tunnel", downErr)
 		}
 		logger.Debug("VPN tunnel successfully shutdown")
 	}()
@@ -94,33 +97,30 @@ func main() {
 	logger.Debug("Resolving server address", zap.String("address", cfg.ServerAddr))
 	serverAddr, err := net.ResolveUDPAddr("udp", cfg.ServerAddr)
 	if nil != err {
-		logger.Error("Failed to resolve server address", zap.Error(err))
-		return
+		return fmt.Errorf("failed to resolve server address", err)
 	}
 	logger.Debug("Resolved server address")
 
 	logger.Debug("Dialing server")
 	conn, err := net.DialUDP("udp", nil, serverAddr)
 	if nil != err {
-		logger.Error("Failed to connect to server", zap.Error(err))
-		return
+		return fmt.Errorf("failed to connect to server", err)
 	}
 	defer func() {
 		logger.Debug("Closing tunnel connection")
-		if err := conn.Close(); nil != err {
-			if errors.Is(err, net.ErrClosed) {
+		if closeErr := conn.Close(); nil != closeErr {
+			if errors.Is(closeErr, net.ErrClosed) {
 				logger.Debug("Tunnel connection has already been closed")
 				return
 			}
-			logger.Error("Failed to properly close tunnel connection", zap.Error(err))
-			return
+			err = fmt.Errorf("failed to properly close tunnel connection", closeErr)
 		}
 		logger.Debug("Tunnel connection has been closed successfully")
 	}()
 	context.AfterFunc(ctx, func() {
 		logger.Debug("Closing tunnel connection due to context cancellation")
-		if err := conn.Close(); nil != err {
-			logger.Error("Failed to close tunnel connection", zap.Error(err))
+		if closeErr := conn.Close(); nil != closeErr {
+			err = fmt.Errorf("failed to close tunnel connection", closeErr)
 			return
 		}
 		logger.Debug("Tunnel connection has been closed successfully")
@@ -146,6 +146,7 @@ func main() {
 	wg.Wait()
 	logger.Debug("Worker goroutines returned")
 	logger.Warn("Exiting")
+	return nil
 }
 
 type Client struct {
