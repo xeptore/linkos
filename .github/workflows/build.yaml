@@ -126,10 +126,24 @@ jobs:
           magick ./res/linkos.png -resize 128x128 -depth 32 -colors 256 -alpha on ./res/128.png
           magick ./res/linkos.png -resize 256x256 -depth 32 -colors 256 -alpha on ./res/256.png
           magick ./res/16.png ./res/32.png ./res/48.png ./res/64.png ./res/128.png ./res/256.png ./res/linkos.ico
-      - name: Set Manifest
-        run: |-
-          go install github.com/akavel/rsrc@v0.10.2
-          & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
+      # - name: Set Manifest
+      #   run: |-
+      #     go install github.com/akavel/rsrc@v0.10.2
+      #     & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
+      - name: Compress Executable
+        shell: msys2 {0}
+        run: |
+          set -ex
+          VERSION=4.2.4
+          workdir=$(pwd)
+          temp_dir=$(mktemp -d)
+          cd "$temp_dir"
+          wget -q "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-win64.zip"
+          unzip "upx-${VERSION}-win64.zip"
+          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --no-backup "${workdir}/bin/client/linkos.exe"
+          "./upx-${VERSION}-win64/upx.exe" --test "${workdir}/bin/client/linkos.exe"
+          cd -
+          rm -rfv "${temp_dir}"
       - name: Get OS & Arch
         id: os_arch
         run: |-
