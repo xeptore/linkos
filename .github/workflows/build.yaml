@@ -150,8 +150,8 @@ jobs:
           echo "os=$(go env GOOS)" >> $env:GITHUB_OUTPUT
           echo "arch=$(go env GOARCH)" >> $env:GITHUB_OUTPUT
       - name: ZIP Artifacts
-        working-directory: .\bin\client
-        run: Compress-Archive -Path . -DestinationPath "${{ github.workspace }}\client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip"
+        working-directory: .\bin\client\
+        run: Compress-Archive -Path '*' -DestinationPath "${{ github.workspace }}\client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
