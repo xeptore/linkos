@@ -9,7 +9,6 @@ import (
 const (
 	serverAddress = ":5000"
 	bufferSize    = 4096
-	vpnSubnetCIDR = "10.0.0.0/24"
 )
 
 type Client struct {
