@@ -11,7 +11,6 @@ import (
 
 	"github.com/samber/mo"
 	"github.com/sirupsen/logrus"
-	"go.uber.org/zap"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 
@@ -37,14 +36,14 @@ type Tun struct {
 }
 
 func New(logger *logrus.Logger) (*Tun, error) {
-	logger.Debug("Loading wintun", zap.String("version", wintun.Version()))
+	logger.WithField("version", wintun.Version()).Debug("Loading wintun")
 
 	guid, err := windows.GUIDFromString(TunGUID)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to parse adapter GUID: %v", err)
 	}
 
-	logger.Debug("Creating adapter.", zap.String("guid", TunGUID))
+	logger.WithField("guid", TunGUID).Debug("Creating adapter.")
 	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to create linkos adapter: %v", err)
@@ -134,14 +133,14 @@ func (t *Tun) ReleasePacketBuffer(p Packet) {
 	t.session.ReleaseReceivePacket(p)
 }
 
-func (t *Tun) Down() error {
+func (t *Tun) Down() (err error) {
 	if err := kernel32.SetEvent(t.stopEvent); nil != err {
 		return fmt.Errorf("tun: failed to set StopEvent: %v", err)
 	}
 	defer func() {
 		t.logger.Debug("Closing StopEvent handle.")
-		if err := kernel32.CloseHandle(t.stopEvent); nil != err {
-			t.logger.Debug("Failed to close StopEvent handle.", zap.Error(err))
+		if stopErr := kernel32.CloseHandle(t.stopEvent); nil != stopErr {
+			t.logger.WithError(stopErr).Debug("Failed to close StopEvent handle.")
 		} else {
 			t.logger.Debug("Successfully closed StopEvent handle.")
 		}

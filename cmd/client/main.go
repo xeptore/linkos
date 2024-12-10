@@ -17,7 +17,6 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/sirupsen/logrus"
-	"go.uber.org/zap"
 
 	"github.com/xeptore/linkos"
 	"github.com/xeptore/linkos/config"
@@ -66,7 +65,7 @@ func run() (err error) {
 	}
 	logger.Debug("VPN tunnel initialized")
 
-	logger.Debug("Assigning IP address to tunnel adapter", zap.String("ip", cfg.IP))
+	logger.WithField("ip", cfg.IP).Debug("Assigning IP address to tunnel adapter")
 	if err := t.AssignIPv4(cfg.IP); nil != err {
 		return fmt.Errorf("failed to assign IP address to tunnel adapter: %v", err)
 	}
@@ -95,7 +94,7 @@ func run() (err error) {
 	}()
 	logger.Debug("VPN tunnel is up")
 
-	logger.Debug("Resolving server address", zap.String("address", cfg.ServerAddr))
+	logger.WithField("address", cfg.ServerAddr).Debug("Resolving server address")
 	serverAddr, err := net.ResolveUDPAddr("udp", cfg.ServerAddr)
 	if nil != err {
 		return fmt.Errorf("failed to resolve server address: %v", err)
@@ -169,22 +168,22 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 		case packet := <-c.packets:
 			p, err := packet.Get()
 			if nil != err {
-				logger.Error("Error reading from TUN device", zap.Error(err))
+				logger.WithError(err).Error("Error reading from TUN device")
 				return
 			}
 
 			if ok, err := filterOutgoingPacket(logger, p); nil != err {
-				logger.Debug("Failed to parse packet for filtering", zap.Error(err))
+				logger.WithError(err).Debug("Failed to parse packet for filtering")
 			} else if !ok {
 				logger.Debug("Dropping packet")
 			}
 
 			n, err := c.conn.Write(p)
 			if nil != err {
-				logger.Error("Error sending data to server", zap.Error(err))
+				logger.WithError(err).Error("Error sending data to server")
 				return
 			}
-			logger.Debug("Outgoing packet has been written to tunnel connection", zap.Int("bytes", n))
+			logger.WithField("bytes", n).Debug("Outgoing packet has been written to tunnel connection")
 		}
 	}
 }
@@ -198,17 +197,17 @@ func (c *Client) handleIncoming(wg *sync.WaitGroup) {
 	for {
 		n, _, err := c.conn.ReadFromUDP(buffer)
 		if nil != err && !errors.Is(err, net.ErrClosed) {
-			logger.Error("Error receiving data from server tunnel", zap.Error(err))
+			logger.WithError(err).Error("Error receiving data from server tunnel")
 			return
 		}
-		logger.Debug("Received bytes from server tunnel", zap.Int("bytes", n))
+		logger.WithField("bytes", n).Debug("Received bytes from server tunnel")
 
 		n, err = c.t.Write(buffer[:n])
 		if nil != err {
-			logger.Error("Error writing to TUN device", zap.Error(err))
+			logger.WithError(err).Error("Error writing to TUN device")
 			return
 		}
-		logger.Debug("Incoming packet has been written to TUN device", zap.Int("bytes", n))
+		logger.WithField("bytes", n).Debug("Incoming packet has been written to TUN device")
 	}
 }
 
@@ -244,17 +243,33 @@ func filterOutgoingPacket(logger *logrus.Logger, p tun.Packet) (bool, error) {
 
 	if layer := packet.Layer(layers.LayerTypeICMPv4); nil != layer {
 		icmp := layer.(*layers.ICMPv4)
-		logger.Debug("Detected ICMPv4 packet", zap.Uint16("seq", icmp.Seq), zap.Uint16("id", icmp.Id), zap.Int("payload_len", len(icmp.Payload)))
+		logger.
+			WithFields(logrus.Fields{
+				"seq":         icmp.Seq,
+				"id":          icmp.Id,
+				"payload_len": len(icmp.Payload),
+			}).
+			Debug("Detected ICMPv4 packet")
 		return true, nil
 	}
 
 	if layer := packet.Layer(layers.LayerTypeIPv4); layer != nil {
 		ip := layer.(*layers.IPv4)
-		logger.Debug("Detected IPv4 packet", zap.String("src", ip.SrcIP.String()), zap.String("dst", ip.DstIP.String()))
+		logger.
+			WithFields(logrus.Fields{
+				"src": ip.SrcIP.String(),
+				"dst": ip.DstIP.String(),
+			}).
+			Debug("Detected IPv4 packet")
 
 		if layer := packet.TransportLayer(); nil != layer {
 			if layer, ok := layer.(*layers.UDP); ok {
-				logger.Debug("Detected UDP packet", zap.String("src_port", layer.SrcPort.String()), zap.String("dst_port", layer.DstPort.String()))
+				logger.
+					WithFields(logrus.Fields{
+						"src_port": layer.SrcPort.String(),
+						"dst_port": layer.DstPort.String(),
+					}).
+					Debug("Detected UDP packet")
 				if layer.DstPort == 5353 && layer.SrcPort == 5353 && ip.DstIP.String() == "224.0.0.251" { // mDNS
 					logger.Debug("Skipping mDNS packet")
 					return false, nil
