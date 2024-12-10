@@ -3,10 +3,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -22,15 +24,18 @@ import (
 	"github.com/xeptore/linkos/tun"
 )
 
+func waitForEnter() {
+	fmt.Fprintln(os.Stdout, "Press enter to exit...")
+	bufio.NewReader(io.LimitReader(os.Stdin, 1)).ReadBytes('\n') //nolint:errcheck
+}
+
 func main() {
 	if err := run(); nil != err {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		fmt.Fprintln(os.Stdout, "Press enter to exit...")
-		fmt.Scanln()
+		waitForEnter()
 		os.Exit(1)
 	}
-	fmt.Fprintln(os.Stdout, "Press enter to exit...")
-	fmt.Scanln()
+	waitForEnter()
 }
 
 func run() (err error) {
@@ -48,11 +53,11 @@ func run() (err error) {
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
 			if err := os.WriteFile("linkos.ini", linkos.ConfigFileTemplateContent, 0o0600); nil != err {
-				return fmt.Errorf("config file was not found. Tried creating a template config file but did not succeeded.")
+				return fmt.Errorf("config file was not found. Tried creating a template config file but did not succeeded: %v", err)
 			}
-			return fmt.Errorf("config file was not found. A template is created with name linkos.ini. You should fill with proper values.")
+			return fmt.Errorf("config file was not found. A template is created with name linkos.ini. You should fill with proper values: %v", err)
 		}
-		return fmt.Errorf("failed to load config file", err)
+		return fmt.Errorf("failed to load config file: %v", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -61,7 +66,7 @@ func run() (err error) {
 	logger.Debug("Initializing VPN tunnel")
 	t, err := tun.New(logger.With(zap.String("module", "tune")))
 	if nil != err {
-		return fmt.Errorf("failed to create VPN tunnel", err)
+		return fmt.Errorf("failed to create VPN tunnel: %v", err)
 	}
 	logger.Debug("VPN tunnel initialized")
 
@@ -83,12 +88,12 @@ func run() (err error) {
 	logger.Debug("Bringing up VPN tunnel")
 	packets, err := t.Up(ctx)
 	if nil != err {
-		return fmt.Errorf("failed to bring up VPN interface", err)
+		return fmt.Errorf("failed to bring up VPN interface: %v", err)
 	}
 	defer func() {
 		logger.Debug("Shutting down VPN tunnel")
 		if downErr := t.Down(); nil != downErr {
-			err = fmt.Errorf("failed to properly shutdown VPN tunnel", downErr)
+			err = fmt.Errorf("failed to properly shutdown VPN tunnel: %v", downErr)
 		}
 		logger.Debug("VPN tunnel successfully shutdown")
 	}()
@@ -97,14 +102,14 @@ func run() (err error) {
 	logger.Debug("Resolving server address", zap.String("address", cfg.ServerAddr))
 	serverAddr, err := net.ResolveUDPAddr("udp", cfg.ServerAddr)
 	if nil != err {
-		return fmt.Errorf("failed to resolve server address", err)
+		return fmt.Errorf("failed to resolve server address: %v", err)
 	}
 	logger.Debug("Resolved server address")
 
 	logger.Debug("Dialing server")
 	conn, err := net.DialUDP("udp", nil, serverAddr)
 	if nil != err {
-		return fmt.Errorf("failed to connect to server", err)
+		return fmt.Errorf("failed to connect to server: %v", err)
 	}
 	defer func() {
 		logger.Debug("Closing tunnel connection")
@@ -113,14 +118,14 @@ func run() (err error) {
 				logger.Debug("Tunnel connection has already been closed")
 				return
 			}
-			err = fmt.Errorf("failed to properly close tunnel connection", closeErr)
+			err = fmt.Errorf("failed to properly close tunnel connection: %v", closeErr)
 		}
 		logger.Debug("Tunnel connection has been closed successfully")
 	}()
 	context.AfterFunc(ctx, func() {
 		logger.Debug("Closing tunnel connection due to context cancellation")
 		if closeErr := conn.Close(); nil != closeErr {
-			err = fmt.Errorf("failed to close tunnel connection", closeErr)
+			err = fmt.Errorf("failed to close tunnel connection: %v", closeErr)
 			return
 		}
 		logger.Debug("Tunnel connection has been closed successfully")
