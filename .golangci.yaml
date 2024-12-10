@@ -53,7 +53,7 @@ linters-settings:
     sections:
       - standard
       - default
-      - prefix(github.com/xeptore/lanix)
+      - prefix(github.com/xeptore/linkos)
     skip-generated: false
   gosec:
     excludes:
