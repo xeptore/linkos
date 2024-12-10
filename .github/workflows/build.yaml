@@ -119,13 +119,13 @@ jobs:
 
           # Commands from: https://tewarid.github.io/2020/09/03/create-a-windows-icon-file-using-imagemagick.html
           # Sizes from: https://learn.microsoft.com/en-us/windows/apps/design/style/iconography/app-icon-construction
-          magick convert ./res/linkos.png -resize 16x16 -depth 32 -colors 256 -alpha on ./res/16.png
-          magick convert ./res/linkos.png -resize 32x32 -depth 32 -colors 256 -alpha on ./res/32.png
-          magick convert ./res/linkos.png -resize 48x48 -depth 32 -colors 256 -alpha on ./res/48.png
-          magick convert ./res/linkos.png -resize 64x64 -depth 32 -colors 256 -alpha on ./res/64.png
-          magick convert ./res/linkos.png -resize 128x128 -depth 32 -colors 256 -alpha on ./res/128.png
-          magick convert ./res/linkos.png -resize 256x256 -depth 32 -colors 256 -alpha on ./res/256.png
-          magick convert ./res/16.png ./res/32.png ./res/48.png ./res/64.png ./res/128.png ./res/256.png ./res/linkos.ico
+          magick ./res/linkos.png -resize 16x16 -depth 32 -colors 256 -alpha on ./res/16.png
+          magick ./res/linkos.png -resize 32x32 -depth 32 -colors 256 -alpha on ./res/32.png
+          magick ./res/linkos.png -resize 48x48 -depth 32 -colors 256 -alpha on ./res/48.png
+          magick ./res/linkos.png -resize 64x64 -depth 32 -colors 256 -alpha on ./res/64.png
+          magick ./res/linkos.png -resize 128x128 -depth 32 -colors 256 -alpha on ./res/128.png
+          magick ./res/linkos.png -resize 256x256 -depth 32 -colors 256 -alpha on ./res/256.png
+          magick ./res/16.png ./res/32.png ./res/48.png ./res/64.png ./res/128.png ./res/256.png ./res/linkos.ico
       - name: Set Manifest
         run: |-
           go install github.com/akavel/rsrc@v0.10.2
