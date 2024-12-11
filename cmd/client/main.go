@@ -57,24 +57,25 @@ func run(logger *logrus.Logger) (err error) {
 		}
 		return fmt.Errorf("failed to load config file: %v", err)
 	}
+	logger.SetLevel(cfg.LogLevel)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 	defer stop()
 
-	logger.Debug("Initializing VPN tunnel")
+	logger.Trace("Initializing VPN tunnel")
 	t, err := tun.New(logger.WithField("module", "tune").Dup().Logger)
 	if nil != err {
 		return fmt.Errorf("failed to create VPN tunnel: %v", err)
 	}
-	logger.Debug("VPN tunnel initialized")
+	logger.Info("VPN tunnel initialized")
 
-	logger.WithField("ip", cfg.IP).Debug("Assigning IP address to tunnel adapter")
+	logger.WithField("ip", cfg.IP).Trace("Assigning IP address to tunnel adapter")
 	if err := t.AssignIPv4(cfg.IP); nil != err {
 		return fmt.Errorf("failed to assign IP address to tunnel adapter: %v", err)
 	}
-	logger.Debug("Assigned IP address to tunnel adapter")
+	logger.Info("Assigned IP address to tunnel adapter")
 
 	// assign gateway
 	// add routes
@@ -85,53 +86,53 @@ func run(logger *logrus.Logger) (err error) {
 	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L107
 	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L71
 
-	logger.Debug("Bringing up VPN tunnel")
+	logger.Trace("Bringing up VPN tunnel")
 	packets, err := t.Up(ctx)
 	if nil != err {
 		return fmt.Errorf("failed to bring up VPN interface: %v", err)
 	}
 	defer func() {
-		logger.Debug("Shutting down VPN tunnel")
+		logger.Trace("Shutting down VPN tunnel")
 		if downErr := t.Down(); nil != downErr {
 			err = fmt.Errorf("failed to properly shutdown VPN tunnel: %v", downErr)
 		}
-		logger.Debug("VPN tunnel successfully shutdown")
+		logger.Trace("VPN tunnel successfully shutdown")
 	}()
-	logger.Debug("VPN tunnel is up")
+	logger.Info("VPN tunnel is up")
 
-	logger.WithField("address", cfg.ServerAddr).Debug("Resolving server address")
+	logger.WithField("address", cfg.ServerAddr).Trace("Resolving server address")
 	serverAddr, err := net.ResolveUDPAddr("udp", cfg.ServerAddr)
 	if nil != err {
 		return fmt.Errorf("failed to resolve server address: %v", err)
 	}
-	logger.Debug("Resolved server address")
+	logger.Trace("Resolved server address")
 
-	logger.Debug("Dialing server")
+	logger.Trace("Dialing server")
 	conn, err := net.DialUDP("udp", nil, serverAddr)
 	if nil != err {
 		return fmt.Errorf("failed to connect to server: %v", err)
 	}
 	defer func() {
-		logger.Debug("Closing tunnel connection")
+		logger.Trace("Closing tunnel connection")
 		if closeErr := conn.Close(); nil != closeErr {
 			if errors.Is(closeErr, net.ErrClosed) {
-				logger.Debug("Tunnel connection has already been closed")
+				logger.Trace("Tunnel connection has already been closed")
 				return
 			}
 			err = fmt.Errorf("failed to properly close tunnel connection: %v", closeErr)
 		}
-		logger.Debug("Tunnel connection has been closed successfully")
+		logger.Info("Tunnel connection has been closed")
 	}()
 	context.AfterFunc(ctx, func() {
-		logger.Debug("Closing tunnel connection due to context cancellation")
+		logger.Trace("Closing tunnel connection due to context cancellation")
 		if closeErr := conn.Close(); nil != closeErr {
 			err = fmt.Errorf("failed to close tunnel connection: %v", closeErr)
 			return
 		}
-		logger.Debug("Tunnel connection has been closed successfully")
+		logger.Info("Tunnel connection has been closed")
 	})
 
-	logger.Debug("Spawning worker goroutines")
+	logger.Trace("Spawning worker goroutines")
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -145,12 +146,11 @@ func run(logger *logrus.Logger) (err error) {
 	go client.handleOutgoing(ctx, &wg)
 	go client.handleIncoming(&wg)
 
-	logger.Debug("Waiting for close signal")
+	logger.Trace("Waiting for close signal")
 	<-ctx.Done()
-	logger.Debug("Close signal received. Waiting for worker goroutines to return")
+	logger.Trace("Close signal received. Waiting for worker goroutines to return")
 	wg.Wait()
-	logger.Debug("Worker goroutines returned")
-	logger.Warn("Exiting")
+	logger.Trace("Worker goroutines returned")
 	return nil
 }
 
@@ -168,7 +168,7 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Debug("Closing due to parent context closure")
+			logger.Trace("Closing due to parent context closure")
 			return
 		case packet := <-c.packets:
 			p, err := packet.Get()
@@ -178,9 +178,9 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 			}
 
 			if ok, err := filterOutgoingPacket(logger, p); nil != err {
-				logger.WithError(err).Debug("Failed to parse packet for filtering")
+				logger.WithError(err).Error("Failed to parse packet for filtering")
 			} else if !ok {
-				logger.Debug("Dropping packet")
+				logger.Trace("Dropping packet")
 			}
 
 			n, err := c.conn.Write(p)
@@ -188,7 +188,7 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 				logger.WithError(err).Error("Error sending data to server")
 				return
 			}
-			logger.WithField("bytes", n).Debug("Outgoing packet has been written to tunnel connection")
+			logger.WithField("bytes", n).Trace("Outgoing packet has been written to tunnel connection")
 		}
 	}
 }
@@ -203,20 +203,20 @@ func (c *Client) handleIncoming(wg *sync.WaitGroup) {
 		n, _, err := c.conn.ReadFromUDP(buffer)
 		if nil != err {
 			if errors.Is(err, net.ErrClosed) {
-				logger.Debug("Ending server tunnel worker due to connection closure")
+				logger.Trace("Ending server tunnel worker due to connection closure")
 			} else {
 				logger.WithError(err).Error("Error receiving data from server tunnel")
 			}
 			return
 		}
-		logger.WithField("bytes", n).Debug("Received bytes from server tunnel")
+		logger.WithField("bytes", n).Trace("Received bytes from server tunnel")
 
 		n, err = c.t.Write(buffer[:n])
 		if nil != err {
 			logger.WithError(err).Error("Error writing to TUN device")
 			return
 		}
-		logger.WithField("bytes", n).Debug("Incoming packet has been written to TUN device")
+		logger.WithField("bytes", n).Trace("Incoming packet has been written to TUN device")
 	}
 }
 
@@ -237,7 +237,7 @@ func filterOutgoingPacket(logger *logrus.Logger, p tun.Packet) (bool, error) {
 	var decoder gopacket.Decoder
 	switch v {
 	case 6:
-		logger.Debug("Skipping IPv6 packet")
+		logger.Trace("Skipping IPv6 packet")
 		return false, nil
 	case 4:
 		decoder = layers.LayerTypeIPv4
@@ -258,7 +258,7 @@ func filterOutgoingPacket(logger *logrus.Logger, p tun.Packet) (bool, error) {
 				"id":          icmp.Id,
 				"payload_len": len(icmp.Payload),
 			}).
-			Debug("Detected ICMPv4 packet")
+			Trace("Detected ICMPv4 packet")
 		return true, nil
 	}
 
@@ -269,7 +269,7 @@ func filterOutgoingPacket(logger *logrus.Logger, p tun.Packet) (bool, error) {
 				"src": ip.SrcIP.String(),
 				"dst": ip.DstIP.String(),
 			}).
-			Debug("Detected IPv4 packet")
+			Trace("Detected IPv4 packet")
 
 		if layer := packet.TransportLayer(); nil != layer {
 			if layer, ok := layer.(*layers.UDP); ok {
@@ -278,9 +278,9 @@ func filterOutgoingPacket(logger *logrus.Logger, p tun.Packet) (bool, error) {
 						"src_port": layer.SrcPort.String(),
 						"dst_port": layer.DstPort.String(),
 					}).
-					Debug("Detected UDP packet")
+					Trace("Detected UDP packet")
 				if layer.DstPort == 5353 && layer.SrcPort == 5353 && ip.DstIP.String() == "224.0.0.251" { // mDNS
-					logger.Debug("Skipping mDNS packet")
+					logger.Trace("Skipping mDNS packet")
 					return false, nil
 				}
 				return true, nil

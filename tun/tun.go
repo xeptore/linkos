@@ -43,19 +43,19 @@ func New(logger *logrus.Logger) (*Tun, error) {
 		return nil, fmt.Errorf("tun: failed to parse adapter GUID: %v", err)
 	}
 
-	logger.WithField("guid", TunGUID).Debug("Creating adapter.")
+	logger.WithField("guid", TunGUID).Trace("Creating adapter")
 	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to create linkos adapter: %v", err)
 	}
-	logger.Debug("Adapter created.")
+	logger.Debug("Adapter created")
 
-	logger.Debug("Starting session.")
+	logger.Trace("Starting session")
 	session, err := adapter.StartSession(TunRingSize)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to start session: %v", err)
 	}
-	logger.Debug("Session successfully created.")
+	logger.Debug("Session successfully created")
 
 	stopEvent, err := kernel32.CreateEvent(true, false, "StopEvent")
 	if nil != err {
@@ -78,7 +78,6 @@ func (t *Tun) AssignIPv4(ipv4 string) error {
 	if err := iphlpapi.SetAdapterIPv4(t.adapter.LUID(), ip.To4(), 24); nil != err {
 		return fmt.Errorf("failed to set adapter IP address: %v", err)
 	}
-	t.logger.Debug("Successfully assigned adapter IP address.")
 	return nil
 }
 
@@ -138,11 +137,11 @@ func (t *Tun) Down() (err error) {
 		return fmt.Errorf("tun: failed to set StopEvent: %v", err)
 	}
 	defer func() {
-		t.logger.Debug("Closing StopEvent handle.")
+		t.logger.Trace("Closing StopEvent handle")
 		if stopErr := kernel32.CloseHandle(t.stopEvent); nil != stopErr {
-			t.logger.WithError(stopErr).Debug("Failed to close StopEvent handle.")
+			t.logger.WithError(stopErr).Error("Failed to close StopEvent handle")
 		} else {
-			t.logger.Debug("Successfully closed StopEvent handle.")
+			t.logger.Trace("Closed StopEvent handle")
 		}
 	}()
 
@@ -151,15 +150,15 @@ func (t *Tun) Down() (err error) {
 		return fmt.Errorf("tun: timed out waiting for receive ring stop after %s", stopWaitDur.String())
 	}
 
-	t.logger.Debug("Ending session")
+	t.logger.Trace("Ending session")
 	t.session.End()
 	t.logger.Debug("Successfully ended session")
 
-	t.logger.Debug("Closing adapter")
+	t.logger.Trace("Closing adapter")
 	if err := t.adapter.Close(); nil != err {
 		return fmt.Errorf("tun: failed to close adapter: %v", err)
 	}
-	t.logger.Debug("Successfully closed adapter.")
+	t.logger.Debug("Successfully closed adapter")
 	return nil
 }
 
