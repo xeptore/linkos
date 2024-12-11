@@ -12,7 +12,6 @@ import (
 
 var (
 	kernel32                   = windows.MustLoadDLL("kernel32.dll")
-	procSetConsoleCtrlHandler  = kernel32.MustFindProc("SetConsoleCtrlHandler")
 	procSetEvent               = kernel32.MustFindProc("SetEvent")
 	procCreateEventW           = kernel32.MustFindProc("CreateEventW")
 	procWaitForSingleObjectEx  = kernel32.MustFindProc("WaitForSingleObjectEx")
@@ -35,21 +34,6 @@ func boolToUintptr(b bool) uintptr {
 	return 0
 }
 
-func ctrlHandler(h func()) func(fdwCtrlType uint32) int32 {
-	return func(fdwCtrlType uint32) int32 {
-		switch fdwCtrlType {
-		case
-			windows.CTRL_C_EVENT,
-			windows.CTRL_CLOSE_EVENT,
-			windows.CTRL_BREAK_EVENT,
-			windows.CTRL_LOGOFF_EVENT,
-			windows.CTRL_SHUTDOWN_EVENT:
-			h()
-		}
-		return 0
-	}
-}
-
 func isErrSuccess(err error) bool {
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
@@ -58,15 +42,6 @@ func isErrSuccess(err error) bool {
 		}
 	}
 	return false
-}
-
-func SetConsoleCtrlHandler(h func()) error {
-	handlerRoutine := ctrlHandler(h)
-	_, _, err := procSetConsoleCtrlHandler.Call(uintptr(unsafe.Pointer(&handlerRoutine)), uintptr(1))
-	if !isErrSuccess(err) {
-		return err
-	}
-	return nil
 }
 
 func WaitForMultipleObjects(handles []windows.Handle, waitAll bool, timeout uint32) (uint32, error) {

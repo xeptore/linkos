@@ -21,7 +21,6 @@ import (
 
 	"github.com/xeptore/linkos"
 	"github.com/xeptore/linkos/config"
-	"github.com/xeptore/linkos/kernel32"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/tun"
 )
@@ -61,12 +60,6 @@ func run(logger *logrus.Logger) (err error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	if err := kernel32.SetConsoleCtrlHandler(cancel); nil != err {
-		logger.WithError(err).Error("Failed to set console control handler")
-	}
-	logger.Debug("Console control handler set")
-
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 	defer stop()
 
@@ -208,8 +201,12 @@ func (c *Client) handleIncoming(wg *sync.WaitGroup) {
 	buffer := make([]byte, bufferSize)
 	for {
 		n, _, err := c.conn.ReadFromUDP(buffer)
-		if nil != err && !errors.Is(err, net.ErrClosed) {
-			logger.WithError(err).Error("Error receiving data from server tunnel")
+		if nil != err {
+			if errors.Is(err, net.ErrClosed) {
+				logger.Debug("Ending server tunnel worker due to connection closure")
+			} else {
+				logger.WithError(err).Error("Error receiving data from server tunnel")
+			}
 			return
 		}
 		logger.WithField("bytes", n).Debug("Received bytes from server tunnel")
