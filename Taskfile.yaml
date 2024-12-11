@@ -34,9 +34,6 @@ tasks:
             ./cmd/client
 
   build:server:
-    requires:
-      vars:
-        - COMP_TIME
     env:
       CC: clang
       CXX: clang++
