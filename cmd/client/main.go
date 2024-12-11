@@ -62,11 +62,10 @@ func run(logger *logrus.Logger) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	context.AfterFunc(ctx, func() {
-		if err := kernel32.SetConsoleCtrlHandler(cancel); nil != err {
-			logger.WithError(err).Error("Failed to set console control handler")
-		}
-	})
+	if err := kernel32.SetConsoleCtrlHandler(cancel); nil != err {
+		logger.WithError(err).Error("Failed to set console control handler")
+	}
+	logger.Debug("Console control handler set")
 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 	defer stop()
