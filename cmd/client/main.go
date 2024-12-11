@@ -32,20 +32,22 @@ func waitForEnter() {
 }
 
 func main() {
-	if err := run(); nil != err {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	logger, err := log.New()
+	if nil != err {
+		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
+		waitForEnter()
+		os.Exit(10)
+	}
+
+	if err := run(logger); nil != err {
+		logger.WithError(err).Error("Failed to run the client")
 		waitForEnter()
 		os.Exit(1)
 	}
 	waitForEnter()
 }
 
-func run() (err error) {
-	logger, err := log.New()
-	if nil != err {
-		return fmt.Errorf("failed to create logger: %v", err)
-	}
-
+func run(logger *logrus.Logger) (err error) {
 	cfg, err := config.Load()
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
