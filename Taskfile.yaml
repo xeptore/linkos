@@ -2,8 +2,6 @@ version: "3"
 
 vars:
   GOLANGCI_LINT_VERSION: v1.62.2
-  COMP_TIME:
-    sh: printf 'constant.compileTime=%s' "$(date -u -Iseconds)"
 
 tasks:
   clean:
@@ -20,9 +18,6 @@ tasks:
           cp ./wintun.dll ./linkos.ini ./bin/client
 
   build:client:
-    requires:
-      vars:
-        - COMP_TIME
     env:
       CGO_ENABLED: 1
       CC: clang
@@ -34,7 +29,7 @@ tasks:
             -a \
             -buildvcs=true \
             -trimpath \
-            -ldflags="-compressdwarf=true -extldflags=-static -s -w -buildid=''" \
+            -ldflags="-X 'main.Version={{default "" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
             -o ./bin/client/linkos.exe \
             ./cmd/client
 
@@ -57,7 +52,7 @@ tasks:
             -a \
             -buildvcs=true \
             -trimpath \
-            -ldflags="-compressdwarf=true -extldflags=-static -s -w -buildid=''" \
+            -ldflags="-X 'main.Version={{default "" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
             -o ./bin/server/linkos \
             ./cmd/server
 

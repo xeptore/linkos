@@ -23,7 +23,10 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/tun"
+	"github.com/xeptore/linkos/update"
 )
+
+var Version = "dev"
 
 func waitForEnter() {
 	fmt.Fprintln(os.Stdout, "Press enter to exit...")
@@ -63,6 +66,15 @@ func run(logger *logrus.Logger) (err error) {
 	defer cancel()
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 	defer stop()
+
+	if Version != "dev" {
+		if exists, err := update.NewerVersionExists(ctx, Version); nil != err {
+			logger.WithError(err).Error("Failed to check for newer version existence. Make sure you have internet access.")
+		} else if exists {
+			logger.Error("Newer version exists. Download it from: https://github.com/xeptore/linkos/releases/latest")
+			return nil
+		}
+	}
 
 	logger.Trace("Initializing VPN tunnel")
 	t, err := tun.New(logger.WithField("module", "tune").Dup().Logger)

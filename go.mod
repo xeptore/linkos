@@ -3,6 +3,7 @@ module github.com/xeptore/linkos
 go 1.23.4
 
 require (
+	github.com/google/go-github/v67 v67.0.0
 	github.com/google/gopacket v1.1.19
 	github.com/samber/mo v1.13.0
 	github.com/sirupsen/logrus v1.9.3
@@ -11,4 +12,7 @@ require (
 	gopkg.in/ini.v1 v1.67.0
 )
 
-require github.com/stretchr/testify v1.8.1 // indirect
+require (
+	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/stretchr/testify v1.8.1 // indirect
+)
