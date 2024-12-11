@@ -98,7 +98,7 @@ jobs:
           location: D:\msys2
           update: true
           release: true
-          install: base-devel mingw-w64-clang-x86_64-clang unzip mingw-w64-clang-x86_64-imagemagick
+          install: base-devel mingw-w64-clang-x86_64-clang unzip mingw-w64-clang-x86_64-imagemagick git
       - name: Get Clang Path
         id: clang
         run: |-
@@ -129,8 +129,16 @@ jobs:
           #  - https://gist.github.com/richlander/5b24dd2d3608cd7111222e621e7e342b
           #  - https://superuser.com/a/605012
           & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
+      - name: Generate Version
+        id: version
+        shell: msys2 {0}
+        run: |-
+          set -x
+          version=$(date -u -d @$(git show -s --format=%ct ${{ github.sha }}) +'%Y%m%d%H%M')
+          echo "version=${version}" >> $GITHUB_OUTPUT
       - name: Build
         env:
+          VERSION: ${{ steps.version.outputs.version }}\clang
           CC: ${{ steps.clang.outputs.dir }}\clang
           CXX: ${{ steps.clang.outputs.dir }}\clang++
         run: task build:client
