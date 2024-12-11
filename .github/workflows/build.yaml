@@ -124,6 +124,10 @@ jobs:
       - name: Set Manifest
         run: |-
           go install github.com/akavel/rsrc@v0.10.2
+          # Resource docs:
+          #  - https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests
+          #  - https://gist.github.com/richlander/5b24dd2d3608cd7111222e621e7e342b
+          #  - https://superuser.com/a/605012
           & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
       - name: Build
         env:
@@ -140,7 +144,7 @@ jobs:
           cd "$temp_dir"
           wget -q "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-win64.zip"
           unzip "upx-${VERSION}-win64.zip"
-          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --no-backup "${{ github.workspace }}/bin/client/linkos.exe"
+          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --strip-relocs=0 --all-methods -k --all-filters "${{ github.workspace }}/bin/client/linkos.exe"
           "./upx-${VERSION}-win64/upx.exe" --test "${{ github.workspace }}/bin/client/linkos.exe"
           rm -rfv "${temp_dir}"
       - name: Get OS & Arch
@@ -188,7 +192,7 @@ jobs:
           temp_dir=$(mktemp -d)
           cd "$temp_dir"
           wget -qO- "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-amd64_linux.tar.xz" | tar -xJvf - "upx-${VERSION}-amd64_linux/upx"
-          "./upx-${VERSION}-amd64_linux/upx" --no-color --mono --no-progress --ultra-brute --no-backup '${{ github.workspace }}/bin/server/linkos'
+          "./upx-${VERSION}-amd64_linux/upx" --no-color --mono --no-progress --ultra-brute --all-methods -k --all-filters '${{ github.workspace }}/bin/server/linkos'
           "./upx-${VERSION}-amd64_linux/upx" --test '${{ github.workspace }}/bin/server/linkos'
           rm -rfv "${temp_dir}"
       - name: Get OS & Arch
