@@ -51,7 +51,8 @@ func ctrlHandler(h func()) func(fdwCtrlType uint32) int32 {
 }
 
 func isErrSuccess(err error) bool {
-	if errno, ok := err.(syscall.Errno); ok {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
 		if errno == 0 {
 			return true
 		}

@@ -60,7 +60,11 @@ func run() (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	context.AfterFunc(ctx, func() { kernel32.SetConsoleCtrlHandler(cancel) })
+	context.AfterFunc(ctx, func() {
+		if err := kernel32.SetConsoleCtrlHandler(cancel); nil != err {
+			logger.WithError(err).Error("Failed to set console control handler")
+		}
+	})
 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 	defer stop()
