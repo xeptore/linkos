@@ -144,7 +144,7 @@ jobs:
           cd "$temp_dir"
           wget -q "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-win64.zip"
           unzip "upx-${VERSION}-win64.zip"
-          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --strip-relocs=0 --all-methods -k --all-filters "${{ github.workspace }}/bin/client/linkos.exe"
+          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --strip-relocs=0 --all-methods --no-backup --all-filters "${{ github.workspace }}/bin/client/linkos.exe"
           "./upx-${VERSION}-win64/upx.exe" --test "${{ github.workspace }}/bin/client/linkos.exe"
           rm -rfv "${temp_dir}"
       - name: Get OS & Arch
@@ -192,7 +192,7 @@ jobs:
           temp_dir=$(mktemp -d)
           cd "$temp_dir"
           wget -qO- "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-amd64_linux.tar.xz" | tar -xJvf - "upx-${VERSION}-amd64_linux/upx"
-          "./upx-${VERSION}-amd64_linux/upx" --no-color --mono --no-progress --ultra-brute --all-methods -k --all-filters '${{ github.workspace }}/bin/server/linkos'
+          "./upx-${VERSION}-amd64_linux/upx" --no-color --mono --no-progress --ultra-brute --all-methods --no-backup --all-filters '${{ github.workspace }}/bin/server/linkos'
           "./upx-${VERSION}-amd64_linux/upx" --test '${{ github.workspace }}/bin/server/linkos'
           rm -rfv "${temp_dir}"
       - name: Get OS & Arch
