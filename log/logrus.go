@@ -9,6 +9,7 @@ import (
 
 func New() (*logrus.Logger, error) {
 	logger := logrus.New()
+	//nolint:exhaustruct
 	logger.SetFormatter(&logrus.TextFormatter{
 		ForceColors:     true,
 		DisableQuote:    true,
