@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/xeptore/linkos"
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/kernel32"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/tun"
 )
@@ -55,7 +57,12 @@ func run() (err error) {
 		return fmt.Errorf("failed to load config file: %v", err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	context.AfterFunc(ctx, func() { kernel32.SetConsoleCtrlHandler(cancel) })
+
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 	defer stop()
 
 	logger.Debug("Initializing VPN tunnel")
