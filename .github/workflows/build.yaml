@@ -138,7 +138,7 @@ jobs:
           echo "version=${version}" >> $GITHUB_OUTPUT
       - name: Build
         env:
-          VERSION: ${{ steps.version.outputs.version }}\clang
+          VERSION: ${{ steps.version.outputs.version }}
           CC: ${{ steps.clang.outputs.dir }}\clang
           CXX: ${{ steps.clang.outputs.dir }}\clang++
         run: task build:client
