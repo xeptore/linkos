@@ -29,7 +29,7 @@ tasks:
             -a \
             -buildvcs=true \
             -trimpath \
-            -ldflags="-X 'main.Version={{default "" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
+            -ldflags="-X 'main.Version={{default "dev" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
             -o ./bin/client/linkos.exe \
             ./cmd/client
 
@@ -49,7 +49,7 @@ tasks:
             -a \
             -buildvcs=true \
             -trimpath \
-            -ldflags="-X 'main.Version={{default "" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
+            -ldflags="-X 'main.Version={{default "dev" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
             -o ./bin/server/linkos \
             ./cmd/server
 

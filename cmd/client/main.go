@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdlog "log"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -26,7 +28,16 @@ import (
 	"github.com/xeptore/linkos/update"
 )
 
-var Version = "dev"
+func init() {
+	// Disable default standard logger to discard internal wintun log messages
+	stdlog.SetOutput(io.Discard)
+	stdlog.SetFlags(0)
+}
+
+var (
+	Version       = "dev"
+	errSigTrapped = context.DeadlineExceeded
+)
 
 func waitForEnter() {
 	fmt.Fprintln(os.Stdout, "Press enter to exit...")
@@ -34,22 +45,38 @@ func waitForEnter() {
 }
 
 func main() {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-c
+		signal.Stop(c)
+		cancel(errSigTrapped)
+	}()
+
 	logger, err := log.New()
 	if nil != err {
 		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
 		waitForEnter()
-		os.Exit(10)
+		return
 	}
 
-	if err := run(logger); nil != err {
-		logger.WithError(err).Error("Failed to run the client")
+	if err := run(ctx, logger); nil != err {
+		logger.WithError(err).Error("Failed to run the application")
 		waitForEnter()
-		os.Exit(1)
+		return
+	}
+	if errors.Is(context.Cause(ctx), errSigTrapped) {
+		logger.Warn("Exiting due to signal")
+		time.Sleep(1 * time.Second)
+		return
 	}
 	waitForEnter()
 }
 
-func run(logger *logrus.Logger) (err error) {
+func run(ctx context.Context, logger *logrus.Logger) (err error) {
 	cfg, err := config.Load()
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
@@ -62,12 +89,8 @@ func run(logger *logrus.Logger) (err error) {
 	}
 	logger.SetLevel(cfg.LogLevel)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
-	defer stop()
-
 	if Version != "dev" {
+		logger.WithField("current_version", Version).Trace("Checking for new releases")
 		if exists, err := update.NewerVersionExists(ctx, Version); nil != err {
 			logger.WithError(err).Error("Failed to check for newer version existence. Make sure you have internet access.")
 		} else if exists {
