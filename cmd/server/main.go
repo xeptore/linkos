@@ -14,6 +14,8 @@ import (
 	"github.com/xeptore/linkos/server"
 )
 
+var Version = "dev"
+
 func main() {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
@@ -25,6 +27,13 @@ func main() {
 	if nil != err {
 		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
 		return
+	}
+
+	{
+		currentLevel := logger.Level
+		logger.SetLevel(logrus.InfoLevel)
+		logger.WithField("version", Version).Info("Starting server")
+		logger.SetLevel(currentLevel)
 	}
 
 	if err := run(ctx, logger); nil != err {
