@@ -78,6 +78,7 @@ func handlePacket(conn *net.UDPConn, packet []byte, clientAddr *net.UDPAddr) {
 		log.Printf("Broadcast packet from %s", srcIP)
 		for ipStr, c := range clients {
 			if ipStr != srcKey {
+				log.Printf("Sending broadcast packet to %s", c.IP)
 				_, err := conn.WriteToUDP(packet, c.Address)
 				if nil != err {
 					log.Printf("Error broadcasting to %s: %v", c.IP, err)
