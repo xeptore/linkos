@@ -6,79 +6,19 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
-
-// TODO: add cleanup routine that cleans up clients that were inactive for a certain period of time
-// TODO: add buffer pool for received packet cloning
 
 type Server struct {
 	bindAddr    string
 	broadcastIP net.IP
 	subnetCIDR  *net.IPNet
 	bufferSize  int
+	bufferPool  *BufferPool
 	clients     *Clients
 	logger      *logrus.Logger
-}
-
-type Clients struct {
-	clients map[string]*net.UDPAddr
-	l       sync.Mutex
-}
-
-func (c *Clients) remove(addr *net.UDPAddr) {
-	c.l.Lock()
-	defer c.l.Unlock()
-
-	for ip, ad := range c.clients {
-		if ad == addr {
-			delete(c.clients, ip)
-			return
-		}
-	}
-}
-
-func (c *Clients) set(addr *net.UDPAddr, srcIP net.IP) {
-	c.l.Lock()
-	defer c.l.Unlock()
-
-	srcIPStr := srcIP.String()
-	c.clients[srcIPStr] = addr
-}
-
-func (c *Clients) broadcast(logger *logrus.Logger, conn *net.UDPConn, srcIP net.IP, packet []byte) {
-	c.l.Lock()
-	defer c.l.Unlock()
-
-	srcIPStr := srcIP.String()
-	for dstIP, dstAddr := range c.clients {
-		if srcIPStr != dstIP {
-			if _, err := conn.WriteToUDP(packet, dstAddr); nil != err {
-				logger.
-					WithFields(
-						logrus.Fields{
-							"src_ip": srcIPStr,
-							"dst_ip": dstIP,
-						},
-					).
-					WithError(err).
-					Error("failed to broadcast packet")
-			}
-		}
-	}
-}
-
-func (c *Clients) forward(logger *logrus.Logger, conn *net.UDPConn, dstIP net.IP, packet []byte) {
-	c.l.Lock()
-	defer c.l.Unlock()
-
-	dstIPStr := dstIP.String()
-	if dstAddr, exists := c.clients[dstIPStr]; exists {
-		if _, err := conn.WriteToUDP(packet, dstAddr); nil != err {
-			logger.WithField("dst_ip", dstIPStr).Error("failed to forward packet")
-		}
-	}
 }
 
 func New(logger *logrus.Logger, subnetCIDR, bindAddr string, bufferSize int) (*Server, error) {
@@ -97,7 +37,8 @@ func New(logger *logrus.Logger, subnetCIDR, bindAddr string, bufferSize int) (*S
 		broadcastIP: broadcastIP,
 		subnetCIDR:  subnetIPNet,
 		bufferSize:  bufferSize,
-		clients:     &Clients{clients: make(map[string]*net.UDPAddr), l: sync.Mutex{}},
+		bufferPool:  NewBufferPool(bufferSize),
+		clients:     &Clients{clients: make(map[string]Client), l: sync.Mutex{}},
 		logger:      logger,
 	}, nil
 }
@@ -147,13 +88,30 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.logger.WithField("bind_addr", s.bindAddr).Info("Server is listening")
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.clients.cleanupInactive()
+			}
+		}
+	}()
+
 	buffer := make([]byte, s.bufferSize)
 	for {
 		n, addr, err := conn.ReadFromUDP(buffer)
 		if nil != err {
 			if errors.Is(err, net.ErrClosed) {
 				s.logger.Trace("Finishing server listener reader as connection has already been closed")
-				return nil
+				break
 			} else {
 				s.logger.WithError(err).Error("Failed to read packet from connection")
 			}
@@ -163,18 +121,28 @@ func (s *Server) Run(ctx context.Context) error {
 			s.clients.remove(addr)
 		}
 
-		// TODO: clone the packet as buffer is reused but packet is sent to other goroutines
-		go s.handlePacket(conn, buffer[:n], addr)
+		buf := s.bufferPool.Get()
+		buf.b.Reset()
+		buf.b.Write(buffer[:n])
+		wg.Add(1)
+		go s.handlePacket(conn, &wg, buf, addr)
 	}
+
+	wg.Wait()
+	return nil
 }
 
 func (s *Server) isInSubnet(ip net.IP) bool {
 	return s.subnetCIDR.Contains(ip)
 }
 
-func (s *Server) handlePacket(conn *net.UDPConn, packet []byte, addr *net.UDPAddr) {
+func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffer *Buffer, addr *net.UDPAddr) {
+	defer wg.Done()
+	defer packetBuffer.Return()
+
+	packet := packetBuffer.b.Bytes()
 	if l := len(packet); l < 20 {
-		s.logger.WithField("bytes", l).WithField("from", addr.String()).Warn("Ignoring invalid IP packet")
+		s.logger.WithField("bytes", l).WithField("from", addr.String()).Warn("Ignoring invalid IP packetBuffer.buf")
 		return
 	}
 
