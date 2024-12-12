@@ -88,7 +88,7 @@ func LoadServer(filename string) (*Server, error) {
 		return nil, fmt.Errorf("config: failed to load: %v", err)
 	}
 
-	bindAddr := strings.TrimSpace(cfg.Section("").Key("bind_addr").String())
+	bindAddr := strings.TrimSpace(cfg.Section("").Key("bind_address").String())
 	subnetCIDR := strings.TrimSpace(cfg.Section("").Key("subnet_cidr").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 	bufferSize := 4096

@@ -12,8 +12,7 @@ type BufferPool struct {
 func NewBufferPool(bufferSize int) *BufferPool {
 	pool := &sync.Pool{
 		New: func() interface{} {
-			buf := bytes.NewBuffer(make([]byte, 0, bufferSize))
-			return &buf
+			return bytes.NewBuffer(make([]byte, 0, bufferSize))
 		},
 	}
 	seedBufferPool(pool)
