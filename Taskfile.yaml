@@ -15,7 +15,8 @@ tasks:
       - cmd: |-
           rm -rf ./bin
           mkdir -p ./bin/{client,server}
-          cp ./wintun.dll ./linkos.ini ./bin/client
+          cp ./wintun.dll ./config/client.ini ./bin/client
+          cp ./config/server.ini ./bin/server
 
   build:client:
     env:
