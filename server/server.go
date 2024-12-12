@@ -98,12 +98,15 @@ func (s *Server) Run(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
+				s.logger.Trace("Finishing inactive clients cleanup worker as parent context has been cancelled")
 				return
 			case <-ticker.C:
+				s.logger.Trace("Running inactive clients cleanup")
 				s.clients.cleanupInactive()
 			}
 		}
 	}()
+	s.logger.Trace("Spawned inactive clients cleanup worker")
 
 	buffer := make([]byte, s.bufferSize)
 	for {
@@ -128,7 +131,9 @@ func (s *Server) Run(ctx context.Context) error {
 		go s.handlePacket(conn, &wg, buf, addr)
 	}
 
+	s.logger.Trace("Waiting for all workers to finish")
 	wg.Wait()
+	s.logger.Trace("All workers have finished")
 	return nil
 }
 
