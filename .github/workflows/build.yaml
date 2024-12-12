@@ -190,7 +190,15 @@ jobs:
           check-latest: false
       - name: Install Task
         uses: arduino/setup-task@v2
+      - name: Generate Version
+        id: version
+        run: |-
+          set -x
+          version=$(date -u -d @$(git show -s --format=%ct ${{ github.sha }}) +'%Y%m%d%H%M')
+          echo "version=${version}" >> $GITHUB_OUTPUT
       - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: task build:server
       - name: Compress Executable
         run: |
