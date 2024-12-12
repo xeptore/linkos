@@ -17,8 +17,8 @@ type Client struct {
 	LogLevel   logrus.Level
 }
 
-func LoadClient() (*Client, error) {
-	cfg, err := ini.Load("config.ini")
+func LoadClient(filename string) (*Client, error) {
+	cfg, err := ini.Load(filename)
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, os.ErrNotExist

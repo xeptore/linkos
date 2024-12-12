@@ -34,8 +34,9 @@ func init() {
 }
 
 var (
-	Version       = "dev"
-	errSigTrapped = context.DeadlineExceeded
+	Version        = "dev"
+	configFileName = "config.ini"
+	errSigTrapped  = context.DeadlineExceeded
 )
 
 func waitForEnter() {
@@ -76,10 +77,10 @@ func main() {
 }
 
 func run(ctx context.Context, logger *logrus.Logger) (err error) {
-	cfg, err := config.Load()
+	cfg, err := config.LoadClient(configFileName)
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
-			if err := os.WriteFile("linkos.ini", config.ClientConfigTemplate, 0o0600); nil != err {
+			if err := os.WriteFile(configFileName, config.ClientConfigTemplate, 0o0600); nil != err {
 				return fmt.Errorf("config file was not found. Tried creating a template config file but did not succeeded: %v", err)
 			}
 			return fmt.Errorf("config file was not found. A template is created with name linkos.ini. You should fill with proper values: %v", err)
