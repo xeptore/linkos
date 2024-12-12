@@ -21,7 +21,6 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/sirupsen/logrus"
 
-	"github.com/xeptore/linkos"
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/tun"
@@ -80,7 +79,7 @@ func run(ctx context.Context, logger *logrus.Logger) (err error) {
 	cfg, err := config.Load()
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
-			if err := os.WriteFile("linkos.ini", linkos.ConfigFileTemplateContent, 0o0600); nil != err {
+			if err := os.WriteFile("linkos.ini", config.ClientConfigTemplate, 0o0600); nil != err {
 				return fmt.Errorf("config file was not found. Tried creating a template config file but did not succeeded: %v", err)
 			}
 			return fmt.Errorf("config file was not found. A template is created with name linkos.ini. You should fill with proper values: %v", err)
