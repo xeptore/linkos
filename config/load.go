@@ -11,14 +11,14 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-type Config struct {
+type Client struct {
 	ServerAddr string
 	IP         string
 	LogLevel   logrus.Level
 }
 
-func Load() (*Config, error) {
-	cfg, err := ini.Load("linkos.ini")
+func LoadClient() (*Client, error) {
+	cfg, err := ini.Load("config.ini")
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, os.ErrNotExist
@@ -30,10 +30,10 @@ func Load() (*Config, error) {
 	tunIP := strings.TrimSpace(cfg.Section("").Key("ip").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 
-	out := Config{
+	out := Client{
 		ServerAddr: serverAddr,
 		IP:         tunIP,
-		LogLevel:   logrus.DebugLevel,
+		LogLevel:   logrus.TraceLevel,
 	}
 
 	if logLevel != "" {
@@ -55,7 +55,7 @@ func Load() (*Config, error) {
 	return &out, nil
 }
 
-func (c Config) validate() error {
+func (c Client) validate() error {
 	if ip := net.ParseIP(c.IP); ip == nil {
 		return errors.New("config: ip is not a valid IP address")
 	}
