@@ -11,6 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const initialClientsCapacity = 20
+
 type Server struct {
 	bindAddr    string
 	broadcastIP net.IP
@@ -38,8 +40,11 @@ func New(logger *logrus.Logger, subnetCIDR, bindAddr string, bufferSize int) (*S
 		subnetCIDR:  subnetIPNet,
 		bufferSize:  bufferSize,
 		bufferPool:  NewBufferPool(bufferSize),
-		clients:     &Clients{clients: make(map[string]Client), l: sync.Mutex{}},
-		logger:      logger,
+		clients: &Clients{
+			clients: make(map[string]Client, initialClientsCapacity),
+			l:       sync.Mutex{},
+		},
+		logger: logger,
 	}, nil
 }
 
