@@ -81,11 +81,11 @@ func run(ctx context.Context, logger *logrus.Logger) (err error) {
 	if nil != err {
 		if errors.Is(err, os.ErrNotExist) {
 			if err := os.WriteFile(configFileName, config.ClientConfigTemplate, 0o0600); nil != err {
-				return fmt.Errorf("config file was not found. Tried creating a template config file but did not succeeded: %v", err)
+				return fmt.Errorf("config: file was not found. Tried creating a template file but did not succeeded: %v", err)
 			}
-			return fmt.Errorf("config file was not found. A template is created with name linkos.ini. You should fill with proper values: %v", err)
+			return fmt.Errorf("config: file was not found. A template is created with name linkos.ini. You should fill with proper values: %v", err)
 		}
-		return fmt.Errorf("failed to load config file: %v", err)
+		return fmt.Errorf("config: failed to load: %v", err)
 	}
 	logger.SetLevel(cfg.LogLevel)
 
@@ -102,15 +102,15 @@ func run(ctx context.Context, logger *logrus.Logger) (err error) {
 	logger.Trace("Initializing VPN tunnel")
 	t, err := tun.New(logger.WithField("module", "tune").Dup().Logger)
 	if nil != err {
-		return fmt.Errorf("failed to create VPN tunnel: %v", err)
+		return fmt.Errorf("tun: failed to create: %v", err)
 	}
 	logger.Info("VPN tunnel initialized")
 
 	logger.WithField("ip", cfg.IP).Trace("Assigning IP address to tunnel adapter")
 	if err := t.AssignIPv4(cfg.IP); nil != err {
-		return fmt.Errorf("failed to assign IP address to tunnel adapter: %v", err)
+		return fmt.Errorf("tun: failed to assign IP address: %v", err)
 	}
-	logger.Info("Assigned IP address to tunnel adapter")
+	logger.WithField("ip", cfg.IP).Info("Assigned IP address to tunnel adapter")
 
 	// assign gateway
 	// add routes
@@ -124,12 +124,12 @@ func run(ctx context.Context, logger *logrus.Logger) (err error) {
 	logger.Trace("Bringing up VPN tunnel")
 	packets, err := t.Up(ctx)
 	if nil != err {
-		return fmt.Errorf("failed to bring up VPN interface: %v", err)
+		return fmt.Errorf("tun: failed to bring up interface: %v", err)
 	}
 	defer func() {
 		logger.Trace("Shutting down VPN tunnel")
 		if downErr := t.Down(); nil != downErr {
-			err = fmt.Errorf("failed to properly shutdown VPN tunnel: %v", downErr)
+			err = fmt.Errorf("tun: failed to properly shutdown: %v", downErr)
 		}
 		logger.Trace("VPN tunnel successfully shutdown")
 	}()
@@ -138,14 +138,14 @@ func run(ctx context.Context, logger *logrus.Logger) (err error) {
 	logger.WithField("address", cfg.ServerAddr).Trace("Resolving server address")
 	serverAddr, err := net.ResolveUDPAddr("udp", cfg.ServerAddr)
 	if nil != err {
-		return fmt.Errorf("failed to resolve server address: %v", err)
+		return fmt.Errorf("tunnel: failed to resolve server address: %v", err)
 	}
 	logger.Trace("Resolved server address")
 
 	logger.Trace("Dialing server")
 	conn, err := net.DialUDP("udp", nil, serverAddr)
 	if nil != err {
-		return fmt.Errorf("failed to connect to server: %v", err)
+		return fmt.Errorf("tunnel: failed to connect to server: %v", err)
 	}
 	defer func() {
 		logger.Trace("Closing tunnel connection")
@@ -154,14 +154,14 @@ func run(ctx context.Context, logger *logrus.Logger) (err error) {
 				logger.Trace("Tunnel connection has already been closed")
 				return
 			}
-			err = fmt.Errorf("failed to properly close tunnel connection: %v", closeErr)
+			err = fmt.Errorf("tunnel: failed to properly close connection: %v", closeErr)
 		}
 		logger.Info("Tunnel connection has been closed")
 	}()
 	context.AfterFunc(ctx, func() {
 		logger.Trace("Closing tunnel connection due to context cancellation")
 		if closeErr := conn.Close(); nil != closeErr {
-			err = fmt.Errorf("failed to close tunnel connection: %v", closeErr)
+			err = fmt.Errorf("tunnel: failed to properly close connection due to context cancellation: %v", closeErr)
 			return
 		}
 		logger.Info("Tunnel connection has been closed")
@@ -282,7 +282,7 @@ func filterOutgoingPacket(logger *logrus.Logger, p tun.Packet) (bool, error) {
 
 	packet := gopacket.NewPacket(p, decoder, gopacket.DecodeOptions{Lazy: true, NoCopy: true}) //nolint:exhaustruct
 	if err := packet.ErrorLayer(); nil != err {
-		return false, fmt.Errorf("failed to parse packet with length %d: %v", len(p), err.Error())
+		return false, fmt.Errorf("tunnel: failed to parse packet with length %d: %v", len(p), err.Error())
 	}
 
 	if layer := packet.Layer(layers.LayerTypeICMPv4); nil != layer {

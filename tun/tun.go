@@ -46,7 +46,7 @@ func New(logger *logrus.Logger) (*Tun, error) {
 	logger.WithField("guid", TunGUID).Trace("Creating adapter")
 	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
-		return nil, fmt.Errorf("tun: failed to create linkos adapter: %v", err)
+		return nil, fmt.Errorf("tun: failed to create adapter: %v", err)
 	}
 	logger.Debug("Adapter created")
 
@@ -103,16 +103,16 @@ func (t *Tun) Up(ctx context.Context) (Packets, error) {
 						case windows.WAIT_OBJECT_0 + 1:
 							return
 						default:
-							out <- mo.Err[Packet](fmt.Errorf("unexpected result from wait to events: %v", err))
+							out <- mo.Err[Packet](fmt.Errorf("tun: unexpected result from wait to events: %v", err))
 						}
 					case errors.Is(err, windows.ERROR_HANDLE_EOF):
-						out <- mo.Err[Packet](fmt.Errorf("expected StopEvent to be set before closing the session: %v", err))
+						out <- mo.Err[Packet](fmt.Errorf("tun: expected StopEvent to be set before closing the session: %v", err))
 						return
 					case errors.Is(err, windows.ERROR_INVALID_DATA):
-						out <- mo.Err[Packet](errors.New("send ring corrupt"))
+						out <- mo.Err[Packet](errors.New("tun: send ring corrupt"))
 						return
 					default:
-						out <- mo.Err[Packet](fmt.Errorf("unexpected error received from session: %v", err))
+						out <- mo.Err[Packet](fmt.Errorf("tun: unexpected error received from session: %v", err))
 						return
 					}
 				}
