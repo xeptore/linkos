@@ -175,7 +175,7 @@ func (t *Tun) FixFirewallRules(localIP, remoteAddr string) error {
 		Description:       "Allow Linkos peers to ping this machine",
 		LocalAddresses:    localIP + "/255.255.255.255",
 		RemoteAddresses:   remoteIP + "/255.255.255.0",
-		Profiles:          wapi.NET_FW_PROFILE2_PUBLIC,
+		Profiles:          wapi.NET_FW_PROFILE2_ALL,
 		ICMPTypesAndCodes: "0:0",
 	}
 	if _, err := wapi.FirewallRuleAddAdvanced(pingRule); nil != err {
@@ -205,7 +205,7 @@ func (t *Tun) FixFirewallRules(localIP, remoteAddr string) error {
 		RemotePorts:     remotePort,
 		LocalAddresses:  localIP + "/255.255.255.255",
 		RemoteAddresses: remoteIP + "/255.255.255.0",
-		Profiles:        wapi.NET_FW_PROFILE2_PUBLIC,
+		Profiles:        wapi.NET_FW_PROFILE2_ALL,
 	}
 	if _, err := wapi.FirewallRuleAddAdvanced(udpRule); nil != err {
 		return fmt.Errorf("tun: fail to add firewall UDP rule: %v", err)
