@@ -155,13 +155,13 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 
 	packet := packetBuffer.b.Bytes()
 	if l := len(packet); l < 20 {
-		s.logger.WithField("bytes", l).WithField("from", addr.String()).Warn("Ignoring invalid IP packetBuffer.buf")
+		s.logger.WithField("bytes", l).WithField("from", addr.String()).Debug("Ignoring invalid IP packetBuffer.buf")
 		return
 	}
 
 	srcIP, dstIP, err := parseIPv4Header(packet)
 	if nil != err {
-		s.logger.WithError(err).Error("Failed to parse packet IP header", addr)
+		s.logger.WithError(err).Debug("Failed to parse packet IP header", addr)
 		return
 	}
 	s.logger.
@@ -169,7 +169,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 			"src_ip": srcIP,
 			"dst_ip": dstIP,
 		}).
-		Trace("Received packet")
+		Debug("Received packet")
 
 	if !s.isInSubnet(srcIP) || !s.isInSubnet(dstIP) {
 		s.logger.
@@ -177,7 +177,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 				"src_ip": srcIP.String(),
 				"dst_ip": dstIP.String(),
 			}).
-			Warn("Ignoring packet outside of subnet")
+			Debug("Ignoring packet outside of subnet")
 		return
 	}
 	s.clients.set(addr, srcIP)
@@ -193,7 +193,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 					"dst_ip": dstIP.String(),
 				},
 			).
-			Trace("Forwarding packet")
+			Debug("Forwarding packet")
 		s.clients.forward(s.logger, conn, dstIP, packet)
 	}
 }
