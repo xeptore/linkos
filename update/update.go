@@ -8,26 +8,26 @@ import (
 	"github.com/google/go-github/v67/github"
 )
 
-func NewerVersionExists(ctx context.Context, currentVersion string) (bool, error) {
+func NewerVersionExists(ctx context.Context, currentVersion string) (exists bool, latestTag string, err error) {
 	client := github.NewClient(nil)
 
-	ctx, cancel := context.WithTimeout(ctx, 10%time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	rls, _, err := client.Repositories.ListReleases(ctx, "xeptore", "linkos", &github.ListOptions{Page: 1, PerPage: 1})
 	if nil != err {
-		return false, fmt.Errorf("update: failed to list project releases: %v", err)
+		return false, "", fmt.Errorf("update: failed to list project releases: %v", err)
 	}
 	if l := len(rls); l != 1 {
-		return false, fmt.Errorf("update: expected exactly 1 release to be returned, got: %d", l)
+		return false, "", fmt.Errorf("update: expected exactly 1 release to be returned, got: %d", l)
 	}
 
-	latestTag := rls[0].GetTagName()
+	latestTag = rls[0].GetTagName()
 	switch {
 	case currentVersion == latestTag:
-		return false, nil
+		return false, "", nil
 	case currentVersion < latestTag:
-		return true, nil
+		return true, latestTag, nil
 	default:
-		return false, fmt.Errorf("update: unexpected condition: current version %q is more recent than latest release version %q", currentVersion, latestTag)
+		return false, "", fmt.Errorf("update: unexpected condition: current version %q is more recent than latest release version %q", currentVersion, latestTag)
 	}
 }

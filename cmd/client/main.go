@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -92,10 +93,10 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 
 	if Version != "dev" {
 		logger.Trace().Str("current_version", Version).Msg("Checking for new releases")
-		if exists, err := update.NewerVersionExists(ctx, Version); nil != err {
+		if exists, latestTag, err := update.NewerVersionExists(ctx, Version); nil != err {
 			logger.Error().Err(err).Msg("Failed to check for newer version existence. Make sure you have internet access.")
 		} else if exists {
-			logger.Error().Msg("Newer version exists. Download it from: https://github.com/xeptore/linkos/releases/latest")
+			logger.Error().Msgf("Newer version exists. Download it from: https://github.com/xeptore/linkos/releases/download/%s/client_%s_%s.zip", latestTag, runtime.GOOS, runtime.GOARCH)
 			return nil
 		}
 	}
