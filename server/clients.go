@@ -8,6 +8,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const clientInactivityEvictionSeconds = 10 * 60
+
 type Clients struct {
 	clients map[string]Client
 	l       sync.Mutex
@@ -15,7 +17,7 @@ type Clients struct {
 
 type Client struct {
 	addr       *net.UDPAddr
-	lastActive time.Time
+	lastActive int64
 }
 
 func (c *Clients) remove(addr *net.UDPAddr) {
@@ -35,7 +37,7 @@ func (c *Clients) cleanupInactive() {
 	defer c.l.Unlock()
 
 	for ip, client := range c.clients {
-		if time.Since(client.lastActive) > 10*time.Second {
+		if time.Now().Unix()-client.lastActive > clientInactivityEvictionSeconds {
 			delete(c.clients, ip)
 		}
 	}
@@ -48,7 +50,7 @@ func (c *Clients) set(addr *net.UDPAddr, srcIP net.IP) {
 	srcIPStr := srcIP.String()
 	c.clients[srcIPStr] = Client{
 		addr:       addr,
-		lastActive: time.Now(),
+		lastActive: time.Now().Unix(),
 	}
 }
 

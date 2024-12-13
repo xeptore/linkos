@@ -11,7 +11,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const initialClientsCapacity = 20
+const (
+	initialClientsCapacity         = 20
+	inactiveClientsCleanupInterval = 1 * time.Minute
+)
 
 type Server struct {
 	bindAddr    string
@@ -97,7 +100,7 @@ func (s *Server) Run(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(inactiveClientsCleanupInterval)
 		defer ticker.Stop()
 
 		for {
