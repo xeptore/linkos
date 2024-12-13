@@ -91,7 +91,7 @@ func LoadServer(filename string) (*Server, error) {
 	bindAddr := strings.TrimSpace(cfg.Section("").Key("bind_address").String())
 	subnetCIDR := strings.TrimSpace(cfg.Section("").Key("subnet_cidr").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
-	bufferSize := 1024
+	bufferSize := DefaultServerBufferSize
 	bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String())
 	if len(bufferSizeStr) != 0 {
 		if i, err := strconv.Atoi(bufferSizeStr); nil != err {

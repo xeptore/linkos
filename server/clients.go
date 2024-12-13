@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-)
 
-const clientInactivityEvictionSeconds = 10 * 60
+	"github.com/xeptore/linkos/config"
+)
 
 type Clients struct {
 	clients map[string]Client
@@ -37,7 +37,7 @@ func (c *Clients) cleanupInactive() {
 	defer c.l.Unlock()
 
 	for ip, client := range c.clients {
-		if time.Now().Unix()-client.lastActive > clientInactivityEvictionSeconds {
+		if time.Now().Unix()-client.lastActive > config.DefaultServerInactiveConnectionEvictionSec {
 			delete(c.clients, ip)
 		}
 	}

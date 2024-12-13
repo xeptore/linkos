@@ -9,11 +9,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-)
 
-const (
-	initialClientsCapacity         = 20
-	inactiveClientsCleanupInterval = 1 * time.Minute
+	"github.com/xeptore/linkos/config"
 )
 
 type Server struct {
@@ -44,7 +41,7 @@ func New(logger *logrus.Logger, subnetCIDR, bindAddr string, bufferSize int) (*S
 		bufferSize:  bufferSize,
 		bufferPool:  NewBufferPool(bufferSize),
 		clients: &Clients{
-			clients: make(map[string]Client, initialClientsCapacity),
+			clients: make(map[string]Client, config.DefaultServerInitialClientsCap),
 			l:       sync.Mutex{},
 		},
 		logger: logger,
@@ -100,7 +97,7 @@ func (s *Server) Run(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(inactiveClientsCleanupInterval)
+		ticker := time.NewTicker(config.DefaultServerCleanupIntervalSec)
 		defer ticker.Stop()
 
 		for {

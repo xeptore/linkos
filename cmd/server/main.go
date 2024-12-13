@@ -29,12 +29,9 @@ func main() {
 		return
 	}
 
-	{
-		currentLevel := logger.Level
-		logger.SetLevel(logrus.InfoLevel)
+	log.WithLevelless(logger, func(logger *logrus.Logger) {
 		logger.WithField("version", Version).Info("Starting server")
-		logger.SetLevel(currentLevel)
-	}
+	})
 
 	if err := run(ctx, logger); nil != err {
 		logger.WithError(err).Error("Failed to run the application")

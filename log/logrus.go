@@ -21,3 +21,10 @@ func New() (*logrus.Logger, error) {
 	logger.SetOutput(os.Stderr)
 	return logger, nil
 }
+
+func WithLevelless(logger *logrus.Logger, fn func(logger *logrus.Logger)) {
+	currentLevel := logger.Level
+	logger.SetLevel(logrus.InfoLevel)
+	defer logger.SetLevel(currentLevel)
+	fn(logger)
+}

@@ -178,6 +178,10 @@ func run(ctx context.Context, logger *logrus.Logger) (err error) {
 		logger:  logger.WithField("module", "client").Dup().Logger,
 	}
 
+	log.WithLevelless(logger, func(logger *logrus.Logger) {
+		logger.WithField("version", Version).Info("Starting VPN client")
+	})
+
 	go client.handleOutgoing(ctx, &wg)
 	go client.handleIncoming(&wg)
 
@@ -232,8 +236,7 @@ func (c *Client) handleIncoming(wg *sync.WaitGroup) {
 	defer wg.Done()
 	logger := c.logger.WithField("worker", "incoming").Dup().Logger
 
-	const bufferSize = 2048
-	buffer := make([]byte, bufferSize)
+	buffer := make([]byte, config.DefaultClientBufferSize)
 	for {
 		n, _, err := c.conn.ReadFromUDP(buffer)
 		if nil != err {

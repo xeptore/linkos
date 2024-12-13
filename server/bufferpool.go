@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"sync"
+
+	"github.com/xeptore/linkos/config"
 )
 
 type BufferPool struct {
@@ -20,7 +22,7 @@ func NewBufferPool(bufferSize int) *BufferPool {
 }
 
 func seedBufferPool(pool *sync.Pool) {
-	for range 100 {
+	for range config.DefaultServerBufferPoolInitialSeeds {
 		pool.Put(pool.New())
 	}
 }
