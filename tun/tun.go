@@ -9,8 +9,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/samber/mo"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 
@@ -32,30 +32,30 @@ type Tun struct {
 	adapter   *wintun.Adapter
 	session   wintun.Session
 	stopEvent windows.Handle
-	logger    *logrus.Logger
+	logger    zerolog.Logger
 }
 
-func New(logger *logrus.Logger) (*Tun, error) {
-	logger.WithField("version", wintun.Version()).Debug("Loading wintun")
+func New(logger zerolog.Logger) (*Tun, error) {
+	logger.Debug().Str("version", wintun.Version()).Msg("Loading wintun")
 
 	guid, err := windows.GUIDFromString(TunGUID)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to parse adapter GUID: %v", err)
 	}
 
-	logger.WithField("guid", TunGUID).Trace("Creating adapter")
+	logger.Trace().Str("guid", TunGUID).Msg("Creating adapter")
 	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to create adapter: %v", err)
 	}
-	logger.Debug("Adapter created")
+	logger.Debug().Msg("Adapter created")
 
-	logger.Trace("Starting session")
+	logger.Trace().Msg("Starting session")
 	session, err := adapter.StartSession(TunRingSize)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to start session: %v", err)
 	}
-	logger.Debug("Session successfully created")
+	logger.Debug().Msg("Session successfully created")
 
 	stopEvent, err := kernel32.CreateEvent(true, false, "StopEvent")
 	if nil != err {
@@ -137,11 +137,11 @@ func (t *Tun) Down() (err error) {
 		return fmt.Errorf("tun: failed to set StopEvent: %v", err)
 	}
 	defer func() {
-		t.logger.Trace("Closing StopEvent handle")
+		t.logger.Trace().Msg("Closing StopEvent handle")
 		if stopErr := kernel32.CloseHandle(t.stopEvent); nil != stopErr {
-			t.logger.WithError(stopErr).Error("Failed to close StopEvent handle")
+			t.logger.Error().Err(stopErr).Msg("Failed to close StopEvent handle")
 		} else {
-			t.logger.Trace("Closed StopEvent handle")
+			t.logger.Trace().Msg("Closed StopEvent handle")
 		}
 	}()
 
@@ -150,15 +150,15 @@ func (t *Tun) Down() (err error) {
 		return fmt.Errorf("tun: timed out waiting for receive ring stop after %s", stopWaitDur.String())
 	}
 
-	t.logger.Trace("Ending session")
+	t.logger.Trace().Msg("Ending session")
 	t.session.End()
-	t.logger.Debug("Successfully ended session")
+	t.logger.Debug().Msg("Successfully ended session")
 
-	t.logger.Trace("Closing adapter")
+	t.logger.Trace().Msg("Closing adapter")
 	if err := t.adapter.Close(); nil != err {
 		return fmt.Errorf("tun: failed to close adapter: %v", err)
 	}
-	t.logger.Debug("Successfully closed adapter")
+	t.logger.Debug().Msg("Successfully closed adapter")
 	return nil
 }
 

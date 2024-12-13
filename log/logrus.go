@@ -4,27 +4,22 @@ import (
 	"os"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 )
 
-func New() (*logrus.Logger, error) {
-	logger := logrus.New()
-	//nolint:exhaustruct
-	logger.SetFormatter(&logrus.TextFormatter{
-		ForceColors:     true,
-		DisableQuote:    true,
-		FullTimestamp:   true,
-		PadLevelText:    true,
-		TimestampFormat: time.DateTime,
-	})
-	logger.SetLevel(logrus.InfoLevel)
-	logger.SetOutput(os.Stderr)
+func New() (zerolog.Logger, error) {
+	logger := zerolog.
+		New(
+			zerolog.ConsoleWriter{ //nolint:exhaustruct
+				Out:        os.Stderr,
+				TimeFormat: time.DateTime,
+			},
+		).
+		Level(zerolog.InfoLevel).
+		With().
+		Timestamp().
+		Logger()
 	return logger, nil
 }
 
-func WithLevelless(logger *logrus.Logger, fn func(logger *logrus.Logger)) {
-	currentLevel := logger.Level
-	logger.SetLevel(logrus.InfoLevel)
-	defer logger.SetLevel(currentLevel)
-	fn(logger)
-}
+const NoLevel = zerolog.InfoLevel

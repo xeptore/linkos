@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 
 	"github.com/xeptore/linkos/config"
 )
@@ -58,7 +58,7 @@ func (c *Clients) set(addr *net.UDPAddr, srcIP net.IP) {
 	c.l.Unlock()
 }
 
-func (c *Clients) broadcast(logger *logrus.Logger, conn *net.UDPConn, srcIP net.IP, packet []byte) {
+func (c *Clients) broadcast(logger zerolog.Logger, conn *net.UDPConn, srcIP net.IP, packet []byte) {
 	srcIPStr := srcIP.String()
 
 	c.l.RLock()
@@ -72,24 +72,18 @@ func (c *Clients) broadcast(logger *logrus.Logger, conn *net.UDPConn, srcIP net.
 
 	for _, dstAddr := range dstAddrs {
 		dstIP := dstAddr.IP.String()
+		logger := logger.With().Str("dst_ip", dstIP).Logger()
 		if _, err := conn.WriteToUDP(packet, dstAddr); nil != err {
-			logger.
-				WithFields(
-					logrus.Fields{
-						"src_ip": srcIPStr,
-						"dst_ip": dstIP,
-					},
-				).
-				WithError(err).
-				Error("Failed to broadcast packet")
+			logger.Error().Err(err).Msg("Failed to broadcast packet")
 		} else {
-			logger.WithFields(logrus.Fields{"src_ip": srcIPStr, "dst_ip": dstIP}).Trace("Broadcasted packet")
+			logger.Trace().Msg("Broadcasted packet")
 		}
 	}
 }
 
-func (c *Clients) forward(logger *logrus.Logger, conn *net.UDPConn, dstIP net.IP, packet []byte) {
+func (c *Clients) forward(logger zerolog.Logger, conn *net.UDPConn, dstIP net.IP, packet []byte) {
 	dstIPStr := dstIP.String()
+	logger = logger.With().Str("dst_ip", dstIPStr).Logger()
 
 	c.l.RLock()
 	dstClient, exists := c.clients[dstIPStr]
@@ -100,8 +94,8 @@ func (c *Clients) forward(logger *logrus.Logger, conn *net.UDPConn, dstIP net.IP
 	c.l.RUnlock()
 
 	if _, err := conn.WriteToUDP(packet, dstClient.addr); nil != err {
-		logger.WithField("dst_ip", dstIPStr).Error("Failed to forward packet")
+		logger.Error().Err(err).Msg("Failed to forward packet")
 	} else {
-		logger.WithField("dst_ip", dstIPStr).Trace("Forwarded packet")
+		logger.Trace().Msg("Forwarded packet")
 	}
 }

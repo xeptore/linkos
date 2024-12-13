@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/log"
@@ -28,23 +28,22 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
 		return
 	}
+	logger = logger.With().Str("version", Version).Logger()
 
-	log.WithLevelless(logger, func(logger *logrus.Logger) {
-		logger.WithField("version", Version).Info("Starting server")
-	})
+	logger.WithLevel(log.NoLevel).Msg("Starting server")
 
 	if err := run(ctx, logger); nil != err {
-		logger.WithError(err).Error("Failed to run the application")
+		logger.Error().Err(err).Msg("Failed to run the application")
 		return
 	}
 }
 
-func run(ctx context.Context, logger *logrus.Logger) error {
+func run(ctx context.Context, logger zerolog.Logger) error {
 	cfg, err := config.LoadServer("config.ini")
 	if nil != err {
 		return fmt.Errorf("config: failed to load: %v", err)
 	}
-	logger.SetLevel(cfg.LogLevel)
+	logger = logger.Level(cfg.LogLevel)
 
 	srv, err := server.New(logger, cfg.SubnetCIDR, cfg.BindAddr, cfg.BufferSize)
 	if nil != err {

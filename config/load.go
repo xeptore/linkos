@@ -8,14 +8,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 	"gopkg.in/ini.v1"
 )
 
 type Client struct {
 	ServerAddr string
 	IP         string
-	LogLevel   logrus.Level
+	LogLevel   zerolog.Level
 }
 
 func LoadClient(filename string) (*Client, error) {
@@ -34,13 +34,13 @@ func LoadClient(filename string) (*Client, error) {
 	out := Client{
 		ServerAddr: serverAddr,
 		IP:         tunIP,
-		LogLevel:   logrus.TraceLevel,
+		LogLevel:   DefaultClientLogLevel,
 	}
 
 	if logLevel != "" {
-		if lvl, err := logrus.ParseLevel(logLevel); nil != err {
-			acceptedLevels := make([]string, len(logrus.AllLevels))
-			for i, lvl := range logrus.AllLevels {
+		if lvl, err := zerolog.ParseLevel(logLevel); nil != err {
+			acceptedLevels := make([]string, len(allLogLevels))
+			for i, lvl := range allLogLevels {
 				acceptedLevels[i] = fmt.Sprintf("%q", lvl)
 			}
 			return nil, fmt.Errorf("config: invalid value of %q for log_level configuration option, accepted values are %s", logLevel, strings.Join(acceptedLevels, ", "))
@@ -76,7 +76,17 @@ type Server struct {
 	BindAddr   string
 	SubnetCIDR string
 	BufferSize int
-	LogLevel   logrus.Level
+	LogLevel   zerolog.Level
+}
+
+var allLogLevels = []zerolog.Level{
+	zerolog.TraceLevel,
+	zerolog.DebugLevel,
+	zerolog.InfoLevel,
+	zerolog.WarnLevel,
+	zerolog.ErrorLevel,
+	zerolog.FatalLevel,
+	zerolog.PanicLevel,
 }
 
 func LoadServer(filename string) (*Server, error) {
@@ -105,13 +115,13 @@ func LoadServer(filename string) (*Server, error) {
 		BindAddr:   bindAddr,
 		SubnetCIDR: subnetCIDR,
 		BufferSize: bufferSize,
-		LogLevel:   logrus.TraceLevel,
+		LogLevel:   DefaultServerLogLevel,
 	}
 
 	if logLevel != "" {
-		if lvl, err := logrus.ParseLevel(logLevel); nil != err {
-			acceptedLevels := make([]string, len(logrus.AllLevels))
-			for i, lvl := range logrus.AllLevels {
+		if lvl, err := zerolog.ParseLevel(logLevel); nil != err {
+			acceptedLevels := make([]string, len(allLogLevels))
+			for i, lvl := range allLogLevels {
 				acceptedLevels[i] = fmt.Sprintf("%q", lvl)
 			}
 			return nil, fmt.Errorf("config: invalid value of %q for log_level configuration option, accepted values are %s", logLevel, strings.Join(acceptedLevels, ", "))
