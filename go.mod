@@ -15,12 +15,14 @@ require (
 )
 
 require (
-	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/google/cabbie v1.0.2 // indirect
-	github.com/google/glazier v0.0.0-20211029225403-9f766cca891d // indirect
+	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/google/cabbie v1.0.5 // indirect
+	github.com/google/glazier v0.0.0-20241126095658-e789eac437f1 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
-	github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d // indirect
+	github.com/scjalliance/comshim v0.0.0-20240712181150-e070933cb68e // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
+	gopkg.in/toast.v1 v1.0.0-20180812000517-0a84660828b2 // indirect
 )
