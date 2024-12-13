@@ -130,8 +130,6 @@ func (t *Tun) SetIPv4Options() error {
 	iface.ManagedAddressConfigurationSupported = false
 	iface.OtherStatefulConfigurationSupported = false
 	iface.NLMTU = config.DefaultClientTunDeviceMTU
-	iface.UseAutomaticMetric = false
-	iface.Metric = 0
 	if err := iface.Set(); nil != err {
 		return fmt.Errorf("tun: failed to save interface options: %v", err)
 	}
