@@ -13,7 +13,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -114,7 +113,6 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	logger.Info().Str("ip", cfg.IP).Msg("Assigned IP address to tunnel adapter")
 
 	// assign gateway
-	// add routes
 	// see:
 	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L117
 	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L130-L149
@@ -136,77 +134,88 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}()
 	logger.Info().Msg("VPN tunnel is up")
 
-	logger.Trace().Str("address", cfg.ServerAddr).Msg("Resolving server address")
-	serverAddr, err := net.ResolveUDPAddr("udp", cfg.ServerAddr)
-	if nil != err {
-		return fmt.Errorf("tunnel: failed to resolve server address: %v", err)
-	}
-	logger.Trace().Msg("Resolved server address")
-
-	logger.Trace().Msg("Dialing server")
-	conn, err := net.DialUDP("udp", nil, serverAddr)
-	if nil != err {
-		return fmt.Errorf("tunnel: failed to connect to server: %v", err)
-	}
-	if err := conn.SetReadBuffer(config.DefaultClientBufferSize); nil != err {
-		return fmt.Errorf("tunnel: failed to set read buffer: %v", err)
-	}
-	if err := conn.SetWriteBuffer(config.DefaultClientBufferSize); nil != err {
-		return fmt.Errorf("tunnel: failed to set write buffer: %v", err)
-	}
-	defer func() {
-		logger.Trace().Msg("Closing tunnel connection")
-		if closeErr := conn.Close(); nil != closeErr {
-			if errors.Is(closeErr, net.ErrClosed) {
-				logger.Trace().Msg("Tunnel connection has already been closed")
-				return
-			}
-			err = fmt.Errorf("tunnel: failed to properly close connection: %v", closeErr)
-		}
-		logger.Info().Msg("Tunnel connection has been closed")
-	}()
-	context.AfterFunc(ctx, func() {
-		logger.Trace().Msg("Closing tunnel connection due to context cancellation")
-		if closeErr := conn.Close(); nil != closeErr {
-			err = fmt.Errorf("tunnel: failed to properly close connection due to context cancellation: %v", closeErr)
-			return
-		}
-		logger.Info().Msg("Tunnel connection has been closed")
-	})
-
-	logger.Trace().Msg("Spawning worker goroutines")
-	var wg sync.WaitGroup
-	wg.Add(2)
-
 	client := Client{
-		t:       t,
-		conn:    conn,
-		packets: packets,
-		logger:  logger.With().Str("module", "client").Logger(),
+		t:          t,
+		serverAddr: cfg.ServerAddr,
+		packets:    packets,
+		logger:     logger.With().Str("module", "client").Logger(),
 	}
 
 	logger.WithLevel(log.NoLevel).Msg("Starting VPN client")
-
-	go client.handleOutgoing(ctx, &wg)
-	go client.handleIncoming(&wg)
-
-	logger.Trace().Msg("Waiting for close signal")
-	<-ctx.Done()
-	logger.Trace().Msg("Close signal received. Waiting for worker goroutines to return")
-	wg.Wait()
-	logger.Trace().Msg("Worker goroutines returned")
+	client.run(ctx)
 	return nil
 }
 
 type Client struct {
-	t       *tun.Tun
-	conn    *net.UDPConn
-	packets tun.Packets
-	logger  zerolog.Logger
+	t          *tun.Tun
+	packets    tun.Packets
+	serverAddr string
+	logger     zerolog.Logger
 }
 
-func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (c *Client) run(ctx context.Context) {
+	connectFailedAttempts := 0
+	for {
+		conn, err := c.connect(ctx)
+		if nil != err {
+			connectFailedAttempts++
+			retryDelaySec := 2 * connectFailedAttempts
+			c.logger.Error().Err(err).Msgf("Failed to connect to server. Reconnecting in %d seconds...", retryDelaySec)
+			time.Sleep(time.Duration(retryDelaySec) * time.Second)
+		} else {
+			c.logger.Info().Msg("Connected to server")
+			connectFailedAttempts = 0
+		}
+
+		done := make(chan struct{})
+		go func() {
+			c.handleInbound(conn)
+			done <- struct{}{}
+		}()
+
+		c.handleOutbound(ctx, conn)
+
+		c.logger.Debug().Msg("Outbound worker returned. Closing tunnel connection...")
+		if err := conn.Close(); nil != err {
+			c.logger.Error().Err(err).Msg("Failed to close tunnel connection")
+		} else {
+			c.logger.Debug().Msg("Closed tunnel connection")
+		}
+
+		c.logger.Trace().Msg("Waiting for inbound worker to return")
+		<-done
+		c.logger.Trace().Msg("Inbound worker returned")
+
+		if err := ctx.Err(); nil != err {
+			return
+		}
+	}
+}
+
+func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
+	c.logger.Trace().Str("address", c.serverAddr).Msg("Resolving server address")
+	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddr)
+	if nil != err {
+		return nil, fmt.Errorf("tunnel: failed to resolve server address: %v", err)
+	}
+	c.logger.Trace().Msg("Resolved server address")
+
+	c.logger.Trace().Msg("Dialing server")
+	conn, err := net.DialUDP("udp", nil, serverAddr)
+	if nil != err {
+		return nil, fmt.Errorf("tunnel: failed to connect to server: %v", err)
+	}
+	if err := conn.SetReadBuffer(config.DefaultClientBufferSize); nil != err {
+		return nil, fmt.Errorf("tunnel: failed to set read buffer: %v", err)
+	}
+	if err := conn.SetWriteBuffer(config.DefaultClientBufferSize); nil != err {
+		return nil, fmt.Errorf("tunnel: failed to set write buffer: %v", err)
+	}
+
+	return conn, nil
+}
+
+func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 	logger := c.logger.With().Str("worker", "outgoing").Logger()
 
 	for {
@@ -227,7 +236,7 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 				logger.Trace().Msg("Dropping packet")
 			}
 
-			n, err := c.conn.Write(p)
+			n, err := conn.Write(p)
 			if nil != err {
 				logger.Error().Err(err).Msg("Error sending data to server")
 				return
@@ -237,13 +246,12 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (c *Client) handleIncoming(wg *sync.WaitGroup) {
-	defer wg.Done()
+func (c *Client) handleInbound(conn *net.UDPConn) {
 	logger := c.logger.With().Str("worker", "incoming").Logger()
 
 	buffer := make([]byte, config.DefaultClientBufferSize)
 	for {
-		n, _, err := c.conn.ReadFromUDP(buffer)
+		n, _, err := conn.ReadFromUDP(buffer)
 		if nil != err {
 			if errors.Is(err, net.ErrClosed) {
 				logger.Trace().Msg("Ending server tunnel worker due to connection closure")
