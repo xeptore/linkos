@@ -101,7 +101,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 
 	logger.Trace().Msg("Initializing VPN tunnel")
-	t, err := tun.New(logger.With().Str("module", "tune").Logger())
+	t, err := tun.New(logger.With().Str("module", "tun").Logger())
 	if nil != err {
 		return fmt.Errorf("tun: failed to create: %v", err)
 	}
@@ -113,13 +113,17 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 	logger.Info().Str("ip", cfg.IP).Msg("Assigned IP address to tunnel adapter")
 
-	// assign gateway
-	// see:
-	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L117
-	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L130-L149
-	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L125
-	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L107
-	//     https://github.com/SagerNet/sing-tun/blob/b599269a3c8536f49dd914db838951dfcce99e5c/tun_windows.go#L71
+	logger.Debug().Msg("Setting adapter IPv4 options")
+	if err := t.SetIPv4Options(); nil != err {
+		return fmt.Errorf("tun: failed to set adapter IPv4 options: %v", err)
+	}
+	logger.Debug().Msg("Set adapter IPv4 options")
+
+	logger.Debug().Msg("Fixing firwall rules")
+	if err := t.FixFirewallRules(cfg.IP, cfg.ServerAddr); nil != err {
+		return fmt.Errorf("tun: failed to fix firewall rules: %v", err)
+	}
+	logger.Debug().Msg("Fixed firewall rules")
 
 	logger.Trace().Msg("Bringing up VPN tunnel")
 	packets, err := t.Up(ctx)

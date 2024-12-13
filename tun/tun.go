@@ -7,19 +7,25 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
+	"os"
+	"path/filepath"
 	"time"
 
+	wapi "github.com/iamacarpet/go-win64api"
 	"github.com/rs/zerolog"
 	"github.com/samber/mo"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
+	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/xeptore/linkos/iphlpapi"
+	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/kernel32"
+	"github.com/xeptore/linkos/winnsapi"
 )
 
 const (
-	TunGUID     = "{C2D7ECB3-0523-42C8-98AF-6FC52B4CC356}"
+	TunGUID     = "{BF663C0F-5A47-4720-A8CB-BEFD5A7A4633}"
 	TunRingSize = 0x400000
 )
 
@@ -70,14 +76,144 @@ func New(logger zerolog.Logger) (*Tun, error) {
 	}, nil
 }
 
+var afinetFamily = winipcfg.AddressFamily(windows.AF_INET)
+
 func (t *Tun) AssignIPv4(ipv4 string) error {
-	ip := net.ParseIP(ipv4)
-	if nil == ip {
-		return errors.New("tun: failed to parse adapter IP address")
+	ip, err := netip.ParseAddr(ipv4)
+	if nil != err {
+		return fmt.Errorf("tun: failed to parse adapter IP address: %v", err)
 	}
-	if err := iphlpapi.SetAdapterIPv4(t.adapter.LUID(), ip.To4(), 24); nil != err {
-		return fmt.Errorf("failed to set adapter IP address: %v", err)
+	t.logger.Debug().Str("addr", ip.String()).Msg("Parsed adater IP address")
+
+	luid := winipcfg.LUID(t.adapter.LUID())
+
+	prefix := netip.PrefixFrom(ip, 24)
+	if err := luid.SetIPAddressesForFamily(afinetFamily, []netip.Prefix{prefix}); nil != err {
+		return fmt.Errorf("tun: failed to set adapter IP address: %v", err)
 	}
+	t.logger.Debug().Str("prefix", prefix.String()).Msg("Parsed adapter IP prefix")
+
+	dnsServerAddrs := make([]netip.Addr, 0, 2)
+	dnsServerAddr, err := netip.ParseAddr("1.1.1.2")
+	if nil != err {
+		return fmt.Errorf("tun: failed to parse DNS server address: %v", err)
+	}
+	dnsServerAddrs = append(dnsServerAddrs, dnsServerAddr)
+	dnsServerAddr, err = netip.ParseAddr("9.9.9.11")
+	if nil != err {
+		return fmt.Errorf("tun: failed to parse DNS server address: %v", err)
+	}
+	dnsServerAddrs = append(dnsServerAddrs, dnsServerAddr)
+	if err := luid.SetDNS(afinetFamily, dnsServerAddrs, nil); nil != err {
+		return fmt.Errorf("tun: failed to set DNS servers for adapter: %v", err)
+	}
+	if err := luid.FlushDNS(afinetFamily); nil != err {
+		return fmt.Errorf("tun: failed to flush DNS: %v", err)
+	}
+	if err := winnsapi.FlushResolverCache(); nil != err {
+		return fmt.Errorf("tun: failed to flush DNS resolver cache: %v", err)
+	}
+	// disablednsregistration
+
+	return nil
+}
+
+func (t *Tun) SetIPv4Options() error {
+	luid := winipcfg.LUID(t.adapter.LUID())
+	iface, err := luid.IPInterface(afinetFamily)
+	if err != nil {
+		return err
+	}
+	iface.ForwardingEnabled = true
+	iface.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
+	iface.DadTransmits = 0
+	iface.ManagedAddressConfigurationSupported = false
+	iface.OtherStatefulConfigurationSupported = false
+	iface.NLMTU = config.DefaultClientTunDeviceMTU
+	iface.UseAutomaticMetric = false
+	iface.Metric = 0
+	if err := iface.Set(); nil != err {
+		return fmt.Errorf("tun: failed to save interface options: %v", err)
+	}
+	return nil
+}
+
+func (t *Tun) FixFirewallRules(localIP, remoteAddr string) error {
+	absPath, err := filepath.Abs(os.Args[0])
+	if nil != err {
+		return fmt.Errorf("tun: failed to get process absolute path: %v", err)
+	}
+	t.logger.Debug().Str("path", absPath).Msg("Found process absolute path")
+
+	remoteIP, remotePort, err := net.SplitHostPort(remoteAddr)
+	if nil != err {
+		return fmt.Errorf("tun: failed to split remote host port: %v", err)
+	}
+	t.logger.Debug().Str("ip", remoteIP).Str("port", remotePort).Msg("Split remote address")
+
+	var (
+		pingRuleName = "linkos (" + absPath + ") - ping"
+		udpRuleName  = "linkos (" + absPath + ") - udp"
+	)
+
+	t.logger.Debug().Msg("Deleting possibly existing ping firewall rule")
+	for {
+		if ok, err := wapi.FirewallRuleDelete(pingRuleName); nil != err {
+			return fmt.Errorf("tun: failed to delete existing ping firewall rule: %v", err)
+		} else if !ok {
+			break
+		}
+	}
+	t.logger.Debug().Msg("Deleted possibly existing ping firewall rule")
+
+	t.logger.Debug().Msg("Adding ping firewall rule")
+	pingRule := wapi.FWRule{ //nolint:exhaustruct
+		Name:              pingRuleName,
+		ApplicationName:   absPath,
+		Enabled:           true,
+		Protocol:          wapi.NET_FW_IP_PROTOCOL_ICMPv4,
+		Direction:         wapi.NET_FW_RULE_DIR_IN,
+		Action:            wapi.NET_FW_ACTION_ALLOW,
+		Description:       "Allow Linkos peers to ping this machine",
+		LocalAddresses:    localIP + "/255.255.255.255",
+		RemoteAddresses:   remoteIP + "/255.255.255.0",
+		Profiles:          wapi.NET_FW_PROFILE2_PUBLIC,
+		ICMPTypesAndCodes: "0:0",
+	}
+	if _, err := wapi.FirewallRuleAddAdvanced(pingRule); nil != err {
+		return fmt.Errorf("tun: fail to add firewall ping rule: %v", err)
+	}
+	t.logger.Debug().Msg("Added ping firewall rule")
+
+	t.logger.Debug().Msg("Deleting possibly existing udp firewall rule")
+	for {
+		if ok, err := wapi.FirewallRuleDelete(udpRuleName); nil != err {
+			return fmt.Errorf("tun: failed to delete existing udp firewall rule: %v", err)
+		} else if !ok {
+			break
+		}
+	}
+	t.logger.Debug().Msg("Deleted possibly existing udp firewall rule")
+
+	t.logger.Debug().Msg("Adding possibly existing udp firewall rule")
+	udpRule := wapi.FWRule{ //nolint:exhaustruct
+		Name:            udpRuleName,
+		ApplicationName: absPath,
+		Enabled:         true,
+		Protocol:        wapi.NET_FW_IP_PROTOCOL_UDP,
+		Direction:       wapi.NET_FW_RULE_DIR_IN,
+		Action:          wapi.NET_FW_ACTION_ALLOW,
+		Description:     "Allow Linkos peers to communicate with this machine",
+		RemotePorts:     remotePort,
+		LocalAddresses:  localIP + "/255.255.255.255",
+		RemoteAddresses: remoteIP + "/255.255.255.0",
+		Profiles:        wapi.NET_FW_PROFILE2_PUBLIC,
+	}
+	if _, err := wapi.FirewallRuleAddAdvanced(udpRule); nil != err {
+		return fmt.Errorf("tun: fail to add firewall UDP rule: %v", err)
+	}
+	t.logger.Debug().Msg("Added possibly existing udp firewall rule")
+
 	return nil
 }
 
