@@ -20,7 +20,7 @@ func NewBufferPool(bufferSize int) *BufferPool {
 }
 
 func seedBufferPool(pool *sync.Pool) {
-	for range 42 {
+	for range 100 {
 		pool.Put(pool.New())
 	}
 }
