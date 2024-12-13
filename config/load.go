@@ -74,7 +74,7 @@ func (c Client) validate() error {
 
 type Server struct {
 	BindAddr   string
-	SubnetCIDR string
+	IPNet      string
 	BufferSize int
 	LogLevel   zerolog.Level
 }
@@ -99,7 +99,7 @@ func LoadServer(filename string) (*Server, error) {
 	}
 
 	bindAddr := strings.TrimSpace(cfg.Section("").Key("bind_address").String())
-	subnetCIDR := strings.TrimSpace(cfg.Section("").Key("subnet_cidr").String())
+	ipNet := strings.TrimSpace(cfg.Section("").Key("ip_net").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 	bufferSize := DefaultServerBufferSize
 	bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String())
@@ -113,7 +113,7 @@ func LoadServer(filename string) (*Server, error) {
 
 	out := Server{
 		BindAddr:   bindAddr,
-		SubnetCIDR: subnetCIDR,
+		IPNet:      ipNet,
 		BufferSize: bufferSize,
 		LogLevel:   DefaultServerLogLevel,
 	}
@@ -144,10 +144,10 @@ func (s Server) validate() error {
 		return errors.New("config: bind_address must be a valid address")
 	}
 
-	if len(s.SubnetCIDR) == 0 {
-		return errors.New("config: subnet_cidr is required")
-	} else if _, _, err := net.ParseCIDR(s.SubnetCIDR); nil != err {
-		return errors.New("config: subnet_cidr must be a valid CIDR notation")
+	if len(s.IPNet) == 0 {
+		return errors.New("config: ip_net is required")
+	} else if _, _, err := net.ParseCIDR(s.IPNet); nil != err {
+		return errors.New("config: ip_net must be a valid CIDR notation")
 	}
 
 	return nil

@@ -45,7 +45,7 @@ func run(ctx context.Context, logger zerolog.Logger) error {
 	}
 	logger = logger.Level(cfg.LogLevel)
 
-	srv, err := server.New(logger, cfg.SubnetCIDR, cfg.BindAddr, cfg.BufferSize)
+	srv, err := server.New(logger, cfg.IPNet, cfg.BindAddr, cfg.BufferSize)
 	if nil != err {
 		return fmt.Errorf("server: failed to initialize: %v", err)
 	}

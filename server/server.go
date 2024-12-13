@@ -23,8 +23,8 @@ type Server struct {
 	logger      zerolog.Logger
 }
 
-func New(logger zerolog.Logger, subnetCIDR, bindAddr string, bufferSize int) (*Server, error) {
-	_, subnetIPNet, err := net.ParseCIDR(subnetCIDR)
+func New(logger zerolog.Logger, ipNet, bindAddr string, bufferSize int) (*Server, error) {
+	_, subnetIPNet, err := net.ParseCIDR(ipNet)
 	if nil != err {
 		return nil, fmt.Errorf("server: error parsing subnet CIDR: %v", err)
 	}
