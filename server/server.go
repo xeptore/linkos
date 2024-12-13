@@ -42,7 +42,7 @@ func New(logger *logrus.Logger, subnetCIDR, bindAddr string, bufferSize int) (*S
 		bufferPool:  NewBufferPool(bufferSize),
 		clients: &Clients{
 			clients: make(map[string]Client, config.DefaultServerInitialClientsCap),
-			l:       sync.Mutex{},
+			l:       sync.RWMutex{},
 		},
 		logger: logger,
 	}, nil
