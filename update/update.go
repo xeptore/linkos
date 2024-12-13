@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/go-github/v67/github"
 )
@@ -10,6 +11,8 @@ import (
 func NewerVersionExists(ctx context.Context, currentVersion string) (bool, error) {
 	client := github.NewClient(nil)
 
+	ctx, cancel := context.WithTimeout(ctx, 10%time.Second)
+	defer cancel()
 	rls, _, err := client.Repositories.ListReleases(ctx, "xeptore", "linkos", &github.ListOptions{Page: 1, PerPage: 1})
 	if nil != err {
 		return false, fmt.Errorf("update: failed to list project releases: %v", err)

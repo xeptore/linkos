@@ -70,7 +70,9 @@ func (c *Clients) broadcast(logger *logrus.Logger, conn *net.UDPConn, srcIP net.
 						},
 					).
 					WithError(err).
-					Error("failed to broadcast packet")
+					Error("Failed to broadcast packet")
+			} else {
+				logger.WithFields(logrus.Fields{"src_ip": srcIPStr, "dst_ip": dstIP}).Trace("Broadcasted packet")
 			}
 		}
 	}
@@ -83,7 +85,9 @@ func (c *Clients) forward(logger *logrus.Logger, conn *net.UDPConn, dstIP net.IP
 	dstIPStr := dstIP.String()
 	if dstClient, exists := c.clients[dstIPStr]; exists {
 		if _, err := conn.WriteToUDP(packet, dstClient.addr); nil != err {
-			logger.WithField("dst_ip", dstIPStr).Error("failed to forward packet")
+			logger.WithField("dst_ip", dstIPStr).Error("Failed to forward packet")
+		} else {
+			logger.WithField("dst_ip", dstIPStr).Trace("Forwarded packet")
 		}
 	}
 }
