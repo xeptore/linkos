@@ -7,6 +7,7 @@ import (
 const (
 	DefaultServerLogLevel                      = zerolog.InfoLevel
 	DefaultClientLogLevel                      = zerolog.InfoLevel
+	DefaultClientTunDeviceMTU                  = 1420
 	DefaultServerBufferSize                    = 256
 	DefaultClientBufferSize                    = 256
 	DefaultServerBufferPoolInitialSeeds        = 100
