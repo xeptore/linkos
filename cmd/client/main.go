@@ -148,6 +148,12 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	if nil != err {
 		return fmt.Errorf("tunnel: failed to connect to server: %v", err)
 	}
+	if err := conn.SetReadBuffer(config.DefaultClientBufferSize); nil != err {
+		return fmt.Errorf("tunnel: failed to set read buffer: %v", err)
+	}
+	if err := conn.SetWriteBuffer(config.DefaultClientBufferSize); nil != err {
+		return fmt.Errorf("tunnel: failed to set write buffer: %v", err)
+	}
 	defer func() {
 		logger.Trace().Msg("Closing tunnel connection")
 		if closeErr := conn.Close(); nil != closeErr {
@@ -216,7 +222,7 @@ func (c *Client) handleOutgoing(ctx context.Context, wg *sync.WaitGroup) {
 			}
 
 			if ok, err := filterOutgoingPacket(logger, p); nil != err {
-				logger.Error().Err(err).Msg("Failed to parse packet for filtering")
+				logger.Debug().Err(err).Msg("Failed to filter packet")
 			} else if !ok {
 				logger.Trace().Msg("Dropping packet")
 			}

@@ -72,6 +72,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if nil != err {
 		return fmt.Errorf("server: failed to initialize listener: %v", err)
 	}
+	if err := conn.SetReadBuffer(s.bufferSize); nil != err {
+		return fmt.Errorf("server: failed to set read buffer: %v", err)
+	}
+	if err := conn.SetWriteBuffer(s.bufferSize); nil != err {
+		return fmt.Errorf("server: failed to set write buffer: %v", err)
+	}
 	defer func() {
 		s.logger.Trace().Msg("Closing server listener")
 		if err := conn.Close(); nil != err {
