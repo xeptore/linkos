@@ -107,6 +107,11 @@ jobs:
           ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang++ --version
       - name: Install Task
         uses: arduino/setup-task@v2
+      - name: Get OS & Arch
+        id: os_arch
+        run: |-
+          echo "os=$(go env GOOS)" >> $env:GITHUB_OUTPUT
+          echo "arch=$(go env GOARCH)" >> $env:GITHUB_OUTPUT
       - name: Prepare Icons
         shell: msys2 {0}
         run: |-
@@ -128,7 +133,7 @@ jobs:
           #  - https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests
           #  - https://gist.github.com/richlander/5b24dd2d3608cd7111222e621e7e342b
           #  - https://superuser.com/a/605012
-          & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml
+          & "$(go env GOPATH)\bin\rsrc.exe" -ico ./res/linkos.ico -manifest ./res/linkos.manifest.xml -o './cmd/client/${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.syso'
       - name: Generate Version
         id: version
         shell: msys2 {0}
@@ -152,14 +157,9 @@ jobs:
           cd "$temp_dir"
           wget -q "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-win64.zip"
           unzip "upx-${VERSION}-win64.zip"
-          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --strip-relocs=0 --all-methods --no-backup --all-filters --compress-resources=0 --compress-icons=0 "${{ github.workspace }}/bin/client/linkos.exe"
+          "./upx-${VERSION}-win64/upx.exe" --no-color --mono --no-progress --ultra-brute --strip-relocs=0 --all-methods --no-backup --all-filters "${{ github.workspace }}/bin/client/linkos.exe"
           "./upx-${VERSION}-win64/upx.exe" --test "${{ github.workspace }}/bin/client/linkos.exe"
           rm -rfv "${temp_dir}"
-      - name: Get OS & Arch
-        id: os_arch
-        run: |-
-          echo "os=$(go env GOOS)" >> $env:GITHUB_OUTPUT
-          echo "arch=$(go env GOARCH)" >> $env:GITHUB_OUTPUT
       - name: ZIP Artifacts
         working-directory: .\bin\client\
         run: Compress-Archive -CompressionLevel Optimal -Path '*' -DestinationPath "${{ github.workspace }}\client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip"
