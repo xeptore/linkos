@@ -76,7 +76,7 @@ func New(logger zerolog.Logger) (*Tun, error) {
 	}, nil
 }
 
-var afinetFamily = winipcfg.AddressFamily(windows.AF_INET)
+var afInetFamily = winipcfg.AddressFamily(windows.AF_INET)
 
 func (t *Tun) AssignIPv4(ipv4 string) error {
 	ip, err := netip.ParseAddr(ipv4)
@@ -88,7 +88,7 @@ func (t *Tun) AssignIPv4(ipv4 string) error {
 	luid := winipcfg.LUID(t.adapter.LUID())
 
 	prefix := netip.PrefixFrom(ip, 24)
-	if err := luid.SetIPAddressesForFamily(afinetFamily, []netip.Prefix{prefix}); nil != err {
+	if err := luid.SetIPAddressesForFamily(afInetFamily, []netip.Prefix{prefix}); nil != err {
 		return fmt.Errorf("tun: failed to set adapter IP address: %v", err)
 	}
 	t.logger.Debug().Str("prefix", prefix.String()).Msg("Parsed adapter IP prefix")
@@ -104,10 +104,10 @@ func (t *Tun) AssignIPv4(ipv4 string) error {
 		return fmt.Errorf("tun: failed to parse DNS server address: %v", err)
 	}
 	dnsServerAddrs = append(dnsServerAddrs, dnsServerAddr)
-	if err := luid.SetDNS(afinetFamily, dnsServerAddrs, nil); nil != err {
+	if err := luid.SetDNS(afInetFamily, dnsServerAddrs, nil); nil != err {
 		return fmt.Errorf("tun: failed to set DNS servers for adapter: %v", err)
 	}
-	if err := luid.FlushDNS(afinetFamily); nil != err {
+	if err := luid.FlushDNS(afInetFamily); nil != err {
 		return fmt.Errorf("tun: failed to flush DNS: %v", err)
 	}
 	if err := winnsapi.FlushResolverCache(); nil != err {
@@ -120,7 +120,7 @@ func (t *Tun) AssignIPv4(ipv4 string) error {
 
 func (t *Tun) SetIPv4Options() error {
 	luid := winipcfg.LUID(t.adapter.LUID())
-	iface, err := luid.IPInterface(afinetFamily)
+	iface, err := luid.IPInterface(afInetFamily)
 	if err != nil {
 		return err
 	}
