@@ -17,7 +17,7 @@ func New() (*logrus.Logger, error) {
 		PadLevelText:    true,
 		TimestampFormat: time.DateTime,
 	})
-	logger.SetLevel(logrus.DebugLevel)
+	logger.SetLevel(logrus.InfoLevel)
 	logger.SetOutput(os.Stderr)
 	return logger, nil
 }
