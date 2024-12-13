@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -83,7 +84,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 			if err := os.WriteFile(configFileName, config.ClientConfigTemplate, 0o0600); nil != err {
 				return fmt.Errorf("config: file was not found. Tried creating a template file but did not succeeded: %v", err)
 			}
-			return fmt.Errorf("config: file was not found. A template is created with name linkos.ini. You should fill with proper values: %v", err)
+			return fmt.Errorf("config: file was not found. A template is created with name %s. You should fill with proper values: %v", configFileName, err)
 		}
 		return fmt.Errorf("config: failed to load: %v", err)
 	}
@@ -156,35 +157,46 @@ type Client struct {
 func (c *Client) run(ctx context.Context) {
 	connectFailedAttempts := 0
 	for {
-		conn, err := c.connect(ctx)
+		conn, err := c.connect()
 		if nil != err {
 			connectFailedAttempts++
 			retryDelaySec := 2 * connectFailedAttempts
-			c.logger.Error().Err(err).Msgf("Failed to connect to server. Reconnecting in %d seconds...", retryDelaySec)
+			c.logger.Error().Err(err).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
 			time.Sleep(time.Duration(retryDelaySec) * time.Second)
 		} else {
 			c.logger.Info().Msg("Connected to server")
 			connectFailedAttempts = 0
 		}
 
-		done := make(chan struct{})
-		go func() {
-			c.handleInbound(conn)
-			done <- struct{}{}
-		}()
+		var wg sync.WaitGroup
+
+		wg.Add(1)
+		context.AfterFunc(ctx, func() {
+			defer wg.Done()
+			c.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
+			if err := conn.Close(); nil != err {
+				if !errors.Is(err, net.ErrClosed) {
+					c.logger.Error().Err(err).Msg("Failed to close tunnel connection triggered by parent context closure")
+				}
+			} else {
+				c.logger.Trace().Msg("Closed tunnel connection due to parent context closure")
+			}
+		})
+
+		wg.Add(1)
+		go c.handleInbound(&wg, conn)
 
 		c.handleOutbound(ctx, conn)
-
-		c.logger.Debug().Msg("Outbound worker returned. Closing tunnel connection...")
+		c.logger.Debug().Msg("Outbound worker returned. Closing tunnel connection")
 		if err := conn.Close(); nil != err {
 			c.logger.Error().Err(err).Msg("Failed to close tunnel connection")
 		} else {
 			c.logger.Debug().Msg("Closed tunnel connection")
 		}
 
-		c.logger.Trace().Msg("Waiting for inbound worker to return")
-		<-done
-		c.logger.Trace().Msg("Inbound worker returned")
+		c.logger.Trace().Msg("Waiting for inbound worker and tunnel connection close routine to return")
+		wg.Wait()
+		c.logger.Trace().Msg("Inbound worker and tunnel connection close routine returned")
 
 		if err := ctx.Err(); nil != err {
 			return
@@ -192,7 +204,7 @@ func (c *Client) run(ctx context.Context) {
 	}
 }
 
-func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
+func (c *Client) connect() (*net.UDPConn, error) {
 	c.logger.Trace().Str("address", c.serverAddr).Msg("Resolving server address")
 	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddr)
 	if nil != err {
@@ -226,6 +238,9 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 		case packet := <-c.packets:
 			p, err := packet.Get()
 			if nil != err {
+				if errors.Is(err, ctx.Err()) {
+					return
+				}
 				logger.Error().Err(err).Msg("Error reading from TUN device")
 				return
 			}
@@ -238,6 +253,9 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 
 			n, err := conn.Write(p)
 			if nil != err {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
 				logger.Error().Err(err).Msg("Error sending data to server")
 				return
 			}
@@ -246,7 +264,8 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 	}
 }
 
-func (c *Client) handleInbound(conn *net.UDPConn) {
+func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
+	defer wg.Done()
 	logger := c.logger.With().Str("worker", "incoming").Logger()
 
 	buffer := make([]byte, config.DefaultClientBufferSize)
