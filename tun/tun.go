@@ -6,13 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"time"
 
-	wapi "github.com/iamacarpet/go-win64api"
 	"github.com/rs/zerolog"
 	"github.com/samber/mo"
 	"golang.org/x/sys/windows"
@@ -133,85 +129,6 @@ func (t *Tun) SetIPv4Options() error {
 	if err := iface.Set(); nil != err {
 		return fmt.Errorf("tun: failed to save interface options: %v", err)
 	}
-	return nil
-}
-
-func (t *Tun) FixFirewallRules(localIP, remoteAddr string) error {
-	absPath, err := filepath.Abs(os.Args[0])
-	if nil != err {
-		return fmt.Errorf("tun: failed to get process absolute path: %v", err)
-	}
-	t.logger.Debug().Str("path", absPath).Msg("Found process absolute path")
-
-	remoteIP, remotePort, err := net.SplitHostPort(remoteAddr)
-	if nil != err {
-		return fmt.Errorf("tun: failed to split remote host port: %v", err)
-	}
-	t.logger.Debug().Str("ip", remoteIP).Str("port", remotePort).Msg("Split remote address")
-
-	var (
-		pingRuleName = "linkos (" + absPath + ") - ping"
-		udpRuleName  = "linkos (" + absPath + ") - udp"
-	)
-
-	t.logger.Debug().Msg("Deleting possibly existing ping firewall rule")
-	for {
-		if ok, err := wapi.FirewallRuleDelete(pingRuleName); nil != err {
-			return fmt.Errorf("tun: failed to delete existing ping firewall rule: %v", err)
-		} else if !ok {
-			break
-		}
-	}
-	t.logger.Debug().Msg("Deleted possibly existing ping firewall rule")
-
-	t.logger.Debug().Msg("Adding ping firewall rule")
-	pingRule := wapi.FWRule{ //nolint:exhaustruct
-		Name:              pingRuleName,
-		ApplicationName:   absPath,
-		Enabled:           true,
-		Protocol:          wapi.NET_FW_IP_PROTOCOL_ICMPv4,
-		Direction:         wapi.NET_FW_RULE_DIR_IN,
-		Action:            wapi.NET_FW_ACTION_ALLOW,
-		Description:       "Allow Linkos peers to ping this machine",
-		LocalAddresses:    localIP + "/255.255.255.255",
-		RemoteAddresses:   remoteIP + "/255.255.255.0",
-		Profiles:          wapi.NET_FW_PROFILE2_ALL,
-		ICMPTypesAndCodes: "0:0",
-	}
-	if _, err := wapi.FirewallRuleAddAdvanced(pingRule); nil != err {
-		return fmt.Errorf("tun: fail to add firewall ping rule: %v", err)
-	}
-	t.logger.Debug().Msg("Added ping firewall rule")
-
-	t.logger.Debug().Msg("Deleting possibly existing udp firewall rule")
-	for {
-		if ok, err := wapi.FirewallRuleDelete(udpRuleName); nil != err {
-			return fmt.Errorf("tun: failed to delete existing udp firewall rule: %v", err)
-		} else if !ok {
-			break
-		}
-	}
-	t.logger.Debug().Msg("Deleted possibly existing udp firewall rule")
-
-	t.logger.Debug().Msg("Adding possibly existing udp firewall rule")
-	udpRule := wapi.FWRule{ //nolint:exhaustruct
-		Name:            udpRuleName,
-		ApplicationName: absPath,
-		Enabled:         true,
-		Protocol:        wapi.NET_FW_IP_PROTOCOL_UDP,
-		Direction:       wapi.NET_FW_RULE_DIR_IN,
-		Action:          wapi.NET_FW_ACTION_ALLOW,
-		Description:     "Allow Linkos peers to communicate with this machine",
-		RemotePorts:     remotePort,
-		LocalAddresses:  localIP + "/255.255.255.255",
-		RemoteAddresses: remoteIP + "/255.255.255.0",
-		Profiles:        wapi.NET_FW_PROFILE2_ALL,
-	}
-	if _, err := wapi.FirewallRuleAddAdvanced(udpRule); nil != err {
-		return fmt.Errorf("tun: fail to add firewall UDP rule: %v", err)
-	}
-	t.logger.Debug().Msg("Added possibly existing udp firewall rule")
-
 	return nil
 }
 
