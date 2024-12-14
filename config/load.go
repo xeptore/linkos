@@ -18,6 +18,14 @@ type Client struct {
 	LogLevel   zerolog.Level
 }
 
+func (c *Client) LogDict() *zerolog.Event {
+	return zerolog.
+		Dict().
+		Str("server_address", c.ServerAddr).
+		Str("ip", c.IP).
+		Str("log_level", c.LogLevel.String())
+}
+
 func LoadClient(filename string) (*Client, error) {
 	cfg, err := ini.Load(filename)
 	if nil != err {
@@ -77,6 +85,15 @@ type Server struct {
 	IPNet      string
 	BufferSize int
 	LogLevel   zerolog.Level
+}
+
+func (s *Server) LogDict() *zerolog.Event {
+	return zerolog.
+		Dict().
+		Str("bind_address", s.BindAddr).
+		Str("ip_net", s.IPNet).
+		Int("buffer_size", s.BufferSize).
+		Str("log_level", s.LogLevel.String())
 }
 
 var allLogLevels = []zerolog.Level{

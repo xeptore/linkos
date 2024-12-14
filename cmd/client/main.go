@@ -91,6 +91,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 		return fmt.Errorf("config: failed to load: %v", err)
 	}
 	logger = logger.Level(cfg.LogLevel)
+	logger.Debug().Dict("config_options", cfg.LogDict()).Msg("Loaded configuration")
 
 	if Version != "dev" {
 		logger.Trace().Str("current_version", Version).Msg("Checking for new releases")
