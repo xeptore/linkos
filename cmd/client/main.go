@@ -57,14 +57,6 @@ func main() {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-c
-		signal.Stop(c)
-		cancel(errSigTrapped)
-	}()
-
 	logger, err := log.New()
 	if nil != err {
 		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
@@ -73,6 +65,15 @@ func main() {
 	}
 	logger = logger.With().Str("version", Version).Logger()
 	logger.Info().Msg("Starting VPN client")
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-c
+		logger.Info().Msg("Close signal received. Exiting...")
+		signal.Stop(c)
+		cancel(errSigTrapped)
+	}()
 
 	if err := run(ctx, logger); nil != err {
 		var createErr tun.CreateError
