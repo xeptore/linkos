@@ -73,7 +73,7 @@ func (c *Client) validate() error {
 
 	if len(c.ServerAddr) == 0 {
 		return errors.New("config: server_address is required")
-	} else if _, err := net.ResolveUDPAddr("udp", c.ServerAddr); nil != err {
+	} else if _, _, err := net.SplitHostPort(c.ServerAddr); nil != err {
 		return errors.New("config: server_address must be a valid address")
 	}
 
