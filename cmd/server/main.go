@@ -44,6 +44,7 @@ func run(ctx context.Context, logger zerolog.Logger) error {
 		return fmt.Errorf("config: failed to load: %v", err)
 	}
 	logger = logger.Level(cfg.LogLevel)
+	logger.Debug().Dict("config", cfg.LogDict()).Msg("Loaded configuration")
 
 	srv, err := server.New(logger, cfg.IPNet, cfg.BindAddr, cfg.BufferSize)
 	if nil != err {
