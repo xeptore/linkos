@@ -22,6 +22,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
 
+	"github.com/xeptore/linkos/client"
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/tun"
@@ -120,12 +121,6 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 	logger.Debug().Msg("Set adapter IPv4 options")
 
-	logger.Debug().Msg("Fixing firwall rules")
-	if err := t.FixFirewallRules(cfg.IP, cfg.ServerAddr); nil != err {
-		return fmt.Errorf("tun: failed to fix firewall rules: %v", err)
-	}
-	logger.Debug().Msg("Fixed firewall rules")
-
 	logger.Trace().Msg("Bringing up VPN tunnel")
 	packets, err := t.Up(ctx)
 	if nil != err {
@@ -148,7 +143,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 
 	logger.WithLevel(log.NoLevel).Msg("Starting VPN client")
-	client.run(ctx)
+	client.runLoop(ctx)
 	return nil
 }
 
@@ -159,10 +154,10 @@ type Client struct {
 	logger     zerolog.Logger
 }
 
-func (c *Client) run(ctx context.Context) {
+func (c *Client) runLoop(ctx context.Context) {
 	connectFailedAttempts := 0
 	for {
-		conn, err := c.connect()
+		conn, err := c.connect(ctx)
 		if nil != err {
 			connectFailedAttempts++
 			retryDelaySec := 2 * connectFailedAttempts
@@ -194,7 +189,9 @@ func (c *Client) run(ctx context.Context) {
 		c.handleOutbound(ctx, conn)
 		c.logger.Debug().Msg("Outbound worker returned. Closing tunnel connection")
 		if err := conn.Close(); nil != err {
-			c.logger.Error().Err(err).Msg("Failed to close tunnel connection")
+			if !errors.Is(err, net.ErrClosed) {
+				c.logger.Error().Err(err).Msg("Failed to close tunnel connection")
+			}
 		} else {
 			c.logger.Debug().Msg("Closed tunnel connection")
 		}
@@ -209,9 +206,32 @@ func (c *Client) run(ctx context.Context) {
 	}
 }
 
-func (c *Client) connect() (*net.UDPConn, error) {
+func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
 	c.logger.Trace().Str("address", c.serverAddr).Msg("Resolving server address")
-	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddr)
+
+	serverHostname, serverPort, err := net.SplitHostPort(c.serverAddr)
+	if nil != err {
+		return nil, fmt.Errorf("client: invalid server address: %v", err)
+	}
+
+	var serverIP net.IP
+	for {
+		ip, err := client.ResolveAddr(ctx, c.logger, serverHostname)
+		if nil != err {
+			if errors.Is(err, ctx.Err()) {
+				c.logger.Debug().Msg("Ending connect server IP resolution due to context cancellation")
+				return nil, ctx.Err()
+			}
+			c.logger.Error().Err(err).Msg("Failed to resolve server IP address. Retrying in 5 seconds")
+			time.Sleep(5 * time.Second)
+		} else {
+			serverIP = ip
+			break
+		}
+	}
+
+	c.logger.Info().Str("server_ip", serverIP.String()).Msg("Resolving server UDP address using IP address")
+	serverAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(serverIP.String(), serverPort))
 	if nil != err {
 		return nil, fmt.Errorf("tunnel: failed to resolve server address: %v", err)
 	}
