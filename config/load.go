@@ -64,7 +64,7 @@ func LoadClient(filename string) (*Client, error) {
 	return &out, nil
 }
 
-func (c Client) validate() error {
+func (c *Client) validate() error {
 	if len(c.IP) == 0 {
 		return errors.New("config: ip is required")
 	} else if ip := net.ParseIP(c.IP); ip == nil {
@@ -154,7 +154,7 @@ func LoadServer(filename string) (*Server, error) {
 	return &out, nil
 }
 
-func (s Server) validate() error {
+func (s *Server) validate() error {
 	if len(s.BindAddr) == 0 {
 		return errors.New("config: bind_address is required")
 	} else if _, err := net.ResolveUDPAddr("udp", s.BindAddr); nil != err {
