@@ -80,20 +80,21 @@ func New(logger zerolog.Logger) (*Tun, error) {
 
 var afInetFamily = winipcfg.AddressFamily(windows.AF_INET)
 
-func (t *Tun) AssignIPv4(ipv4 string) error {
-	ip, err := netip.ParseAddr(ipv4)
+func (t *Tun) AssignIPv4(ip string) error {
+	ipAddr, err := netip.ParseAddr(ip)
 	if nil != err {
 		return fmt.Errorf("tun: failed to parse adapter IP address: %v", err)
 	}
-	t.logger.Debug().Str("addr", ip.String()).Msg("Parsed adater IP address")
+	logger := t.logger.With().Str("ip", ipAddr.String()).Logger()
+	logger.Debug().Msg("Parsed adater IP address")
 
 	luid := winipcfg.LUID(t.adapter.LUID())
 
-	prefix := netip.PrefixFrom(ip, 24)
+	prefix := netip.PrefixFrom(ipAddr, 24)
 	if err := luid.SetIPAddressesForFamily(afInetFamily, []netip.Prefix{prefix}); nil != err {
 		return fmt.Errorf("tun: failed to set adapter IP address: %v", err)
 	}
-	t.logger.Debug().Str("prefix", prefix.String()).Msg("Parsed adapter IP prefix")
+	logger.Debug().Str("prefix", prefix.String()).Msg("Parsed adapter IP prefix")
 
 	dnsServerAddrs := make([]netip.Addr, 0, 2)
 	dnsServerAddr, err := netip.ParseAddr("1.1.1.2")

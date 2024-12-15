@@ -158,7 +158,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 
 	packet := packetBuffer.b.Bytes()
 	if l := len(packet); l < 20 {
-		s.logger.Debug().Int("bytes", l).Str("from", addr.String()).Msg("Ignoring invalid IP packetBuffer.buf")
+		s.logger.Debug().Int("bytes", l).Str("from", addr.String()).Msg("Ignoring invalid IP packet")
 		return
 	}
 
@@ -174,12 +174,16 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 		logger.Debug().Msg("Ignoring packet outside of subnet")
 		return
 	}
+
 	s.clients.set(addr, srcIP)
 
-	if dstIP.Equal(s.broadcastIP) {
+	switch {
+	case dstIP.Equal(s.subnetCIDR.IP):
+		logger.Trace().Msg("Handled keep-alive packet")
+	case dstIP.Equal(s.broadcastIP):
 		logger.Trace().Msg("Broadcasting packet")
 		s.clients.broadcast(logger, conn, srcIP, packet)
-	} else {
+	default:
 		logger.Debug().Msg("Received packet")
 		s.clients.forward(logger, conn, dstIP, packet)
 	}
