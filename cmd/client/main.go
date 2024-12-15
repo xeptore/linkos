@@ -66,9 +66,18 @@ func main() {
 	logger = logger.With().Str("version", Version).Logger()
 	logger.Info().Msg("Starting VPN client")
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer func() {
+		logger.Trace().Msg("Waiting for signal listener goroutine to return")
+		wg.Wait()
+		logger.Trace().Msg("Signal listener goroutine returned")
+	}()
+
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
+		defer wg.Done()
 		<-c
 		logger.Info().Msg("Close signal received. Exiting...")
 		signal.Stop(c)
