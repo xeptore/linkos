@@ -48,7 +48,7 @@ func New(logger zerolog.Logger) (*Tun, error) {
 	}
 
 	if err := wintun.Uninstall(); nil != err {
-		logger.Error().Err(err).Msg("Failed to uninstall wintun driver")
+		logger.Warn().Err(err).Msg("Failed to uninstall wintun driver")
 	}
 
 	logger.Trace().Str("guid", TunGUID).Msg("Creating adapter")
