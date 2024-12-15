@@ -357,7 +357,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 		case <-time.After(5 * time.Second):
 			logger.Trace().Msg("Sending keep-alive packet")
 			if _, err := conn.Write(packetBytes); nil != err {
-				// TODO: handle closed/disconnected error
+				// itsTODO: handle closed/disconnected error
 				logger.Error().Err(err).Msg("Failed to write keep-alive packet to connection")
 			}
 			logger.Trace().Msg("Sent keep-alive packet")
