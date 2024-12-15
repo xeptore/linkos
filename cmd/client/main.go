@@ -316,7 +316,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	}
 	logger = logger.With().Str("gateway_ip", gatewayIP.String()).Logger()
 
-	header := &ipv4.Header{
+	header := &ipv4.Header{ //nolint:exhaustruct
 		Version:  ipv4.Version,
 		Len:      ipv4.HeaderLen,
 		TOS:      0,
@@ -334,7 +334,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	// Marshal the header into a byte slice
 	packet, err := header.Marshal()
 	if nil != err {
-		logger.Error().Err(err).Msg("Failed to marshali keep-alive packet header before checksum caclulation")
+		logger.Error().Err(err).Msg("Failed to marshal keep-alive packet header before checksum calculation")
 		return
 	}
 
@@ -345,7 +345,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	// Marshal the header again with the calculated checksum
 	packetBytes, err := header.Marshal()
 	if nil != err {
-		logger.Error().Err(err).Msg("Failed to marshali keep-alive packet header after checksum caclulation")
+		logger.Error().Err(err).Msg("Failed to marshal keep-alive packet header after checksum calculation")
 		return
 	}
 
