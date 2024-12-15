@@ -37,6 +37,8 @@ type Tun struct {
 	logger    zerolog.Logger
 }
 
+type CreateError error
+
 func New(logger zerolog.Logger) (*Tun, error) {
 	logger.Debug().Str("version", wintun.Version()).Msg("Loading wintun")
 
@@ -48,7 +50,7 @@ func New(logger zerolog.Logger) (*Tun, error) {
 	logger.Trace().Str("guid", TunGUID).Msg("Creating adapter")
 	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
-		return nil, fmt.Errorf("tun: failed to create adapter: %v", err)
+		return nil, CreateError(fmt.Errorf("tun: failed to create adapter: %v", err))
 	}
 	logger.Debug().Msg("Adapter created")
 
