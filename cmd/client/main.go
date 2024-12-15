@@ -229,7 +229,11 @@ func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
 				return nil, ctx.Err()
 			}
 			c.logger.Error().Err(err).Msg("Failed to resolve server IP address. Retrying in 5 seconds")
-			time.Sleep(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(5 * time.Second):
+			}
 		} else {
 			serverIP = ip
 			break
