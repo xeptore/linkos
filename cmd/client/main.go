@@ -67,7 +67,12 @@ func main() {
 	logger = logger.With().Str("version", Version).Logger()
 
 	if err := run(ctx, logger); nil != err {
-		logger.Error().Err(err).Msg("Failed to run the application")
+		var createErr tun.CreateError
+		if errors.As(err, &createErr) {
+			logger.Error().Err(createErr).Msg("Failed to create VPN tunnel. Try restarting your machine if the problem persists.")
+		} else {
+			logger.Error().Err(err).Msg("Failed to run the application")
+		}
 		waitForEnter()
 		return
 	}
@@ -106,11 +111,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	logger.Trace().Msg("Initializing VPN tunnel")
 	t, err := tun.New(logger.With().Str("module", "tun").Logger())
 	if nil != err {
-		var createErr tun.CreateError
-		if errors.As(err, &createErr) {
-			logger.Error().Err(createErr).Msg("Failed to create VPN tunnel. Try restarting your machine if the problem persists.")
-		}
-		return fmt.Errorf("tun: failed to create: %v", err)
+		return fmt.Errorf("tun: failed to create: %w", err)
 	}
 	logger.Info().Msg("VPN tunnel initialized")
 
