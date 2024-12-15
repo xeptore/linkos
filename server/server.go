@@ -167,7 +167,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 		s.logger.Debug().Err(err).Str("addr", addr.String()).Msg("Failed to parse packet IP header")
 		return
 	}
-	logger := s.logger.With().Str("src_ip", srcIP.String()).Str("dst_ip", dstIP.String()).Logger()
+	logger := s.logger.With().Int("bytes", len(packet)).Str("src_ip", srcIP.String()).Str("dst_ip", dstIP.String()).Logger()
 	logger.Debug().Msg("Received packet")
 
 	if !s.isInSubnet(srcIP) || !s.isInSubnet(dstIP) {
