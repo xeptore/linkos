@@ -47,6 +47,10 @@ func New(logger zerolog.Logger) (*Tun, error) {
 		return nil, fmt.Errorf("tun: failed to parse adapter GUID: %v", err)
 	}
 
+	if err := wintun.Uninstall(); nil != err {
+		logger.Error().Err(err).Msg("Failed to uninstall wintun driver")
+	}
+
 	logger.Trace().Str("guid", TunGUID).Msg("Creating adapter")
 	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
