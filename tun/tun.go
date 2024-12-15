@@ -124,7 +124,7 @@ func (t *Tun) AssignIPv4(ip string) error {
 func (t *Tun) SetIPv4Options() error {
 	luid := winipcfg.LUID(t.adapter.LUID())
 	iface, err := luid.IPInterface(afInetFamily)
-	if err != nil {
+	if nil != err {
 		return err
 	}
 	iface.ForwardingEnabled = true

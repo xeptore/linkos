@@ -11,12 +11,14 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/iputil"
 )
 
 type Server struct {
 	bindAddr    string
 	broadcastIP net.IP
 	subnetCIDR  *net.IPNet
+	gatewayIP   net.IP
 	bufferSize  int
 	bufferPool  *BufferPool
 	clients     *Clients
@@ -24,9 +26,14 @@ type Server struct {
 }
 
 func New(logger zerolog.Logger, ipNet, bindAddr string, bufferSize int) (*Server, error) {
-	_, subnetIPNet, err := net.ParseCIDR(ipNet)
+	ip, subnetIPNet, err := net.ParseCIDR(ipNet)
 	if nil != err {
 		return nil, fmt.Errorf("server: error parsing subnet CIDR: %v", err)
+	}
+
+	gatewayIP, err := iputil.GatewayIP(ip, 24)
+	if nil != err {
+		return nil, fmt.Errorf("server: failed to calculate gateway IP address: %v", err)
 	}
 
 	broadcastIP, err := getBroadcastIP(subnetIPNet)
@@ -38,13 +45,11 @@ func New(logger zerolog.Logger, ipNet, bindAddr string, bufferSize int) (*Server
 		bindAddr:    bindAddr,
 		broadcastIP: broadcastIP,
 		subnetCIDR:  subnetIPNet,
+		gatewayIP:   gatewayIP,
 		bufferSize:  bufferSize,
 		bufferPool:  NewBufferPool(bufferSize),
-		clients: &Clients{
-			clients: make(map[string]Client, config.DefaultServerInitialClientsCap),
-			l:       sync.RWMutex{},
-		},
-		logger: logger,
+		clients:     &Clients{clients: make(map[string]Client, config.DefaultServerInitialClientsCap), l: sync.RWMutex{}},
+		logger:      logger,
 	}, nil
 }
 

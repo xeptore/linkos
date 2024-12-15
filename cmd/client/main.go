@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	_ "embed"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/xeptore/linkos/client"
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/iputil"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/tun"
 	"github.com/xeptore/linkos/update"
@@ -146,7 +148,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 		t:          t,
 		packets:    packets,
 		serverAddr: cfg.ServerAddr,
-		ip:         cfg.IP,
+		ip:         net.ParseIP(cfg.IP),
 		logger:     logger.With().Str("module", "client").Logger(),
 	}
 
@@ -159,7 +161,7 @@ type Client struct {
 	t          *tun.Tun
 	packets    tun.Packets
 	serverAddr string
-	ip         string
+	ip         net.IP
 	logger     zerolog.Logger
 }
 
@@ -307,22 +309,43 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	defer wg.Done()
 	logger := c.logger.With().Str("worker", "keep_alive").Logger()
 
-	gatewayIP, err := getGatewayIP(c.ip)
+	gatewayIP, err := iputil.GatewayIP(c.ip, 24)
 	if nil != err {
 		logger.Error().Err(err).Msg("Failed to calculate gatewat IP address from client IP address")
 		return
 	}
+	logger = logger.With().Str("gateway_ip", gatewayIP.String()).Logger()
 
-	ipHeader := ipv4.Header{
-		Version:  4,
-		TotalLen: 20,
-		Protocol: ipv4.ICMPTypeEcho.Protocol(),
-		Src:      net.ParseIP(c.ip),
+	header := &ipv4.Header{
+		Version:  ipv4.Version,
+		Len:      ipv4.HeaderLen,
+		TOS:      0,
+		TotalLen: ipv4.HeaderLen,
+		ID:       0,
+		Flags:    0,
+		FragOff:  0,
+		TTL:      64,
+		Protocol: 0,
+		Checksum: 0,
+		Src:      c.ip,
 		Dst:      gatewayIP,
 	}
-	packetBytes, err := ipHeader.Marshal()
+
+	// Marshal the header into a byte slice
+	packet, err := header.Marshal()
 	if nil != err {
-		logger.Error().Err(err).Msg("Failed to marshal keep-alive packet header")
+		logger.Error().Err(err).Msg("Failed to marshali keep-alive packet header before checksum caclulation")
+		return
+	}
+
+	// Calculate the checksum (important for network transmission)
+	header.Checksum = 0 // Reset checksum before recalculation
+	header.Checksum = checksumIPv4(packet)
+
+	// Marshal the header again with the calculated checksum
+	packetBytes, err := header.Marshal()
+	if nil != err {
+		logger.Error().Err(err).Msg("Failed to marshali keep-alive packet header after checksum caclulation")
 		return
 	}
 
@@ -334,7 +357,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 		case <-time.After(5 * time.Second):
 			logger.Trace().Msg("Sending keep-alive packet")
 			if _, err := conn.Write(packetBytes); nil != err {
-				// theTODO: handle closed/disconnected error
+				// TODO: handle closed/disconnected error
 				logger.Error().Err(err).Msg("Failed to write keep-alive packet to connection")
 			}
 			logger.Trace().Msg("Sent keep-alive packet")
@@ -342,24 +365,17 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	}
 }
 
-func getGatewayIP(ipStr string) (net.IP, error) {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return nil, fmt.Errorf("invalid IP address")
+func checksumIPv4(b []byte) int {
+	sum := 0
+	for i := 0; i < len(b)-1; i += 2 {
+		sum += int(binary.BigEndian.Uint16(b[i:]))
 	}
-
-	_, network, err := net.ParseCIDR("10.0.0.0/24")
-	if nil != err {
-		return nil, fmt.Errorf("failed to parse CIDR: %v", err)
+	if len(b)%2 != 0 {
+		sum += int(b[len(b)-1]) << 8
 	}
-
-	gatewayIP := network.IP.To4().To4()
-	if gatewayIP == nil {
-		return nil, fmt.Errorf("failed to convert to IPv4")
-	}
-	gatewayIP[3] = 1
-
-	return gatewayIP, nil
+	sum = (sum >> 16) + (sum & 0xffff)
+	sum += sum >> 16
+	return ^sum
 }
 
 func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
