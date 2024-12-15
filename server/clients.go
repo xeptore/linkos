@@ -52,9 +52,7 @@ func (c *Clients) set(addr *net.UDPAddr, srcIP net.IP) {
 	}
 
 	c.l.Lock()
-	if client, ok := c.clients[srcIPStr]; !ok || client.addr != addr {
-		c.clients[srcIPStr] = newClient
-	}
+	c.clients[srcIPStr] = newClient
 	c.l.Unlock()
 }
 

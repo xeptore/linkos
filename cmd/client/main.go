@@ -21,6 +21,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
+	"golang.org/x/net/ipv4"
 
 	"github.com/xeptore/linkos/client"
 	"github.com/xeptore/linkos/config"
@@ -115,11 +116,11 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 	logger.Info().Msg("VPN tunnel initialized")
 
-	logger.Trace().Str("ip", cfg.IP).Msg("Assigning IP address to tunnel adapter")
+	logger.Trace().Msg("Assigning IP address to tunnel adapter")
 	if err := t.AssignIPv4(cfg.IP); nil != err {
 		return fmt.Errorf("tun: failed to assign IP address: %v", err)
 	}
-	logger.Info().Str("ip", cfg.IP).Msg("Assigned IP address to tunnel adapter")
+	logger.Info().Msg("Assigned IP address to tunnel adapter")
 
 	logger.Debug().Msg("Setting adapter IPv4 options")
 	if err := t.SetIPv4Options(); nil != err {
@@ -143,8 +144,9 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 
 	client := Client{
 		t:          t,
-		serverAddr: cfg.ServerAddr,
 		packets:    packets,
+		serverAddr: cfg.ServerAddr,
+		ip:         cfg.IP,
 		logger:     logger.With().Str("module", "client").Logger(),
 	}
 
@@ -157,6 +159,7 @@ type Client struct {
 	t          *tun.Tun
 	packets    tun.Packets
 	serverAddr string
+	ip         string
 	logger     zerolog.Logger
 }
 
@@ -189,8 +192,9 @@ func (c *Client) runLoop(ctx context.Context) {
 			}
 		})
 
-		wg.Add(1)
+		wg.Add(2)
 		go c.handleInbound(&wg, conn)
+		go c.keepAlive(ctx, &wg, conn)
 
 		c.handleOutbound(ctx, conn)
 		c.logger.Debug().Msg("Outbound worker returned. Closing tunnel connection")
@@ -297,6 +301,65 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 			logger.Trace().Int("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
 		}
 	}
+}
+
+func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
+	defer wg.Done()
+	logger := c.logger.With().Str("worker", "keep_alive").Logger()
+
+	gatewayIP, err := getGatewayIP(c.ip)
+	if nil != err {
+		logger.Error().Err(err).Msg("Failed to calculate gatewat IP address from client IP address")
+		return
+	}
+
+	ipHeader := ipv4.Header{
+		Version:  4,
+		TotalLen: 20,
+		Protocol: ipv4.ICMPTypeEcho.Protocol(),
+		Src:      net.ParseIP(c.ip),
+		Dst:      gatewayIP,
+	}
+	packetBytes, err := ipHeader.Marshal()
+	if nil != err {
+		logger.Error().Err(err).Msg("Failed to marshal keep-alive packet header")
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Trace().Msg("Finishing keep-alive loop due to context cancellation")
+			return
+		case <-time.After(5 * time.Second):
+			logger.Trace().Msg("Sending keep-alive packet")
+			if _, err := conn.Write(packetBytes); nil != err {
+				// theTODO: handle closed/disconnected error
+				logger.Error().Err(err).Msg("Failed to write keep-alive packet to connection")
+			}
+			logger.Trace().Msg("Sent keep-alive packet")
+		}
+	}
+}
+
+func getGatewayIP(ipStr string) (net.IP, error) {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid IP address")
+	}
+
+	_, network, err := net.ParseCIDR("10.0.0.0/24")
+	if nil != err {
+		return nil, fmt.Errorf("failed to parse CIDR: %v", err)
+	}
+
+	gatewayIP := network.IP.To4().To4()
+	if gatewayIP == nil {
+		return nil, fmt.Errorf("failed to convert to IPv4")
+	}
+	gatewayIP[3] = 1
+
+	return gatewayIP, nil
 }
 
 func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
