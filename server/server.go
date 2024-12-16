@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
 )
 
@@ -87,7 +88,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.logger.Trace().Msg("Closing server listener")
 		if err := conn.Close(); nil != err {
 			if !errors.Is(err, net.ErrClosed) {
-				s.logger.Error().Err(err).Msg("Failed to close server listener")
+				s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to close server listener")
 			}
 		} else {
 			s.logger.Trace().Msg("Server listener closed")
@@ -96,7 +97,7 @@ func (s *Server) Run(ctx context.Context) error {
 	context.AfterFunc(ctx, func() {
 		s.logger.Trace().Msg("Closing server listener due to parent context cancellation")
 		if err := conn.Close(); nil != err {
-			s.logger.Error().Err(err).Msg("Failed to close server listener")
+			s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to close server listener")
 		} else {
 			s.logger.Trace().Msg("Server listener closed")
 		}
@@ -132,7 +133,7 @@ func (s *Server) Run(ctx context.Context) error {
 				s.logger.Trace().Msg("Finishing server listener reader as connection has already been closed")
 				break
 			} else {
-				s.logger.Error().Err(err).Msg("Failed to read packet from connection")
+				s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to read packet from connection")
 			}
 			continue
 		}
@@ -169,7 +170,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, wg *sync.WaitGroup, packetBuffe
 
 	srcIP, dstIP, err := parseIPv4Header(packet)
 	if nil != err {
-		s.logger.Debug().Err(err).Str("addr", addr.String()).Msg("Failed to parse packet IP header")
+		s.logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Str("addr", addr.String()).Msg("Failed to parse packet IP header")
 		return
 	}
 	logger := s.logger.With().Int("bytes", len(packet)).Str("src_ip", srcIP.String()).Str("dst_ip", dstIP.String()).Logger()
