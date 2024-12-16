@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -73,10 +74,35 @@ func (c *Client) validate() error {
 
 	if len(c.ServerAddr) == 0 {
 		return errors.New("config: server_address is required")
-	} else if _, _, err := net.SplitHostPort(c.ServerAddr); nil != err {
+	} else if hostname, port, err := net.SplitHostPort(c.ServerAddr); nil != err {
 		return errors.New("config: server_address must be a valid address")
+	} else {
+		if !isValidHostname(hostname) {
+			return errors.New("config: server_address host is not a valid hostname")
+		}
+		if err := validatePort(port); nil != err {
+			return fmt.Errorf("config: server_address port is not a valid port number: %v", err)
+		}
 	}
 
+	return nil
+}
+
+// Hostname regex based on RFC 1123.
+var validHostnameRegexp = regexp.MustCompile(`^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$`)
+
+func isValidHostname(host string) bool {
+	return validHostnameRegexp.MatchString(host)
+}
+
+func validatePort(port string) error {
+	p, err := strconv.Atoi(port)
+	if nil != err {
+		return errors.New("port must be a number")
+	}
+	if p < 0 || p > 65535 {
+		return errors.New("port out of range")
+	}
 	return nil
 }
 

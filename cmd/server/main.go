@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/rs/zerolog"
@@ -17,11 +18,8 @@ import (
 var Version = "dev"
 
 func main() {
-	ctx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
-
-	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	logger, err := log.New()
 	if nil != err {
@@ -29,6 +27,24 @@ func main() {
 		return
 	}
 	logger = logger.With().Str("version", Version).Logger()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer func() {
+		logger.Trace().Msg("Waiting for signal listener goroutine to return")
+		wg.Wait()
+		logger.Trace().Msg("Signal listener goroutine returned")
+	}()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		defer wg.Done()
+		<-c
+		logger.Info().Msg("Close signal received. Exiting...")
+		signal.Stop(c)
+		cancel()
+	}()
 
 	logger.WithLevel(log.NoLevel).Msg("Starting server")
 

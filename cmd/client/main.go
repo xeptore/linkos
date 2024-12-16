@@ -48,7 +48,11 @@ var (
 	errSigTrapped  = context.DeadlineExceeded
 )
 
-func waitForEnter() {
+func waitForEnter(ctx context.Context) {
+	if cause := context.Cause(ctx); errors.Is(cause, errSigTrapped) {
+		return
+	}
+
 	fmt.Fprint(os.Stdout, "Press enter to exit...")
 	bufio.NewReader(io.LimitReader(os.Stdin, 1)).ReadBytes('\n') //nolint:errcheck
 }
@@ -57,39 +61,66 @@ func main() {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-c
-		signal.Stop(c)
-		cancel(errSigTrapped)
-	}()
-
 	logger, err := log.New()
 	if nil != err {
 		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
-		waitForEnter()
+		waitForEnter(ctx)
 		return
 	}
 	logger = logger.With().Str("version", Version).Logger()
 	logger.Info().Msg("Starting VPN client")
 
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			logger.Trace().Msg("Context canceled before receiving a close signal")
+		case <-c:
+			logger.Warn().Msg("Close signal received. Exiting...")
+			signal.Stop(c)
+			cancel(errSigTrapped)
+		}
+	}()
+
 	if err := run(ctx, logger); nil != err {
-		var createErr tun.CreateError
-		if errors.As(err, &createErr) {
+		if cause := context.Cause(ctx); errors.Is(cause, errSigTrapped) {
+			logger.Debug().Msg("Client retutned due to receiving a signal")
+		} else if createErr := new(tun.CreateError); errors.As(err, &createErr) {
 			logger.Error().Err(createErr).Msg("Failed to create VPN tunnel. Try restarting your machine if the problem persists.")
+		} else if openURLErr := new(OpenLatestVersionDownloadURLError); errors.As(err, &openURLErr) {
+			logger.
+				Error().
+				Err(err).
+				Dict("err_tree", errutil.Tree(err).LogDict()).
+				Func(func(e *zerolog.Event) {
+					if logger.GetLevel() < zerolog.InfoLevel {
+						e.Str("combined_output", string(openURLErr.CommandOut))
+					}
+				}).
+				Str("download_url", openURLErr.URL).
+				Msg("Failed to open download URL. You can still download it manually using the URL.")
 		} else {
 			logger.Error().Err(err).Msg("Failed to run the application")
 		}
-		waitForEnter()
-		return
 	}
-	if errors.Is(context.Cause(ctx), errSigTrapped) {
-		logger.Warn().Msg("Exiting due to signal")
-		time.Sleep(1 * time.Second)
-		return
-	}
-	waitForEnter()
+
+	cancel(nil)
+	wg.Wait()
+	waitForEnter(ctx)
+}
+
+type OpenLatestVersionDownloadURLError struct {
+	URL        string
+	CommandOut []byte
+}
+
+func (err *OpenLatestVersionDownloadURLError) Error() string {
+	return "failed to open latest version download URL"
 }
 
 func run(ctx context.Context, logger zerolog.Logger) (err error) {
@@ -116,18 +147,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 			downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/client_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
 			cmd := []string{"start", downloadURL}
 			if out, err := exec.Command("cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
-				logger.
-					Error().
-					Err(err).
-					Dict("err_tree", errutil.Tree(err).LogDict()).
-					Func(func(e *zerolog.Event) {
-						if logger.GetLevel() < zerolog.InfoLevel {
-							e.Str("combined_output", string(out))
-						}
-					}).
-					Str("download_url", downloadURL).
-					Msg("Failed to open download URL. You can still download it manually using the URL.")
-				return nil
+				return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
 			}
 			return nil
 		}
@@ -175,8 +195,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 
 	logger.WithLevel(log.NoLevel).Msg("Starting VPN client")
-	client.runLoop(ctx)
-	return nil
+	return client.runLoop(ctx)
 }
 
 type Client struct {
@@ -187,15 +206,20 @@ type Client struct {
 	logger     zerolog.Logger
 }
 
-func (c *Client) runLoop(ctx context.Context) {
+func (c *Client) runLoop(ctx context.Context) error {
 	connectFailedAttempts := 0
 	for {
 		conn, err := c.connect(ctx)
 		if nil != err {
+			if ctxErr := ctx.Err(); nil != ctxErr {
+				c.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
+				return ctxErr
+			}
 			connectFailedAttempts++
 			retryDelaySec := 2 * connectFailedAttempts
 			c.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
 			time.Sleep(time.Duration(retryDelaySec) * time.Second)
+			continue
 		} else {
 			c.logger.Info().Msg("Connected to server")
 			connectFailedAttempts = 0
@@ -239,7 +263,7 @@ func (c *Client) runLoop(ctx context.Context) {
 		c.logger.Trace().Msg("Inbound worker and tunnel connection close routine returned")
 
 		if err := ctx.Err(); nil != err {
-			return
+			return err
 		}
 	}
 }
