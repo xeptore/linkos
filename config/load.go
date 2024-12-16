@@ -108,6 +108,7 @@ func validatePort(port string) error {
 
 type Server struct {
 	BindAddr   string
+	BindDev    string
 	IPNet      string
 	BufferSize int
 	LogLevel   zerolog.Level
@@ -117,6 +118,7 @@ func (s *Server) LogDict() *zerolog.Event {
 	return zerolog.
 		Dict().
 		Str("bind_address", s.BindAddr).
+		Str("bind_dev", s.BindDev).
 		Str("ip_net", s.IPNet).
 		Int("buffer_size", s.BufferSize).
 		Str("log_level", s.LogLevel.String())
@@ -142,9 +144,10 @@ func LoadServer(filename string) (*Server, error) {
 	}
 
 	bindAddr := strings.TrimSpace(cfg.Section("").Key("bind_address").String())
+	bindDev := strings.TrimSpace(cfg.Section("").Key("bind_dev").String())
 	ipNet := strings.TrimSpace(cfg.Section("").Key("ip_net").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
-	bufferSize := DefaultServerBufferSize
+	bufferSize := DefaultBufferSize
 	bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String())
 	if len(bufferSizeStr) != 0 {
 		if i, err := strconv.Atoi(bufferSizeStr); nil != err {
@@ -156,6 +159,7 @@ func LoadServer(filename string) (*Server, error) {
 
 	out := Server{
 		BindAddr:   bindAddr,
+		BindDev:    bindDev,
 		IPNet:      ipNet,
 		BufferSize: bufferSize,
 		LogLevel:   DefaultServerLogLevel,
@@ -185,6 +189,10 @@ func (s *Server) validate() error {
 		return errors.New("config: bind_address is required")
 	} else if _, err := net.ResolveUDPAddr("udp", s.BindAddr); nil != err {
 		return errors.New("config: bind_address must be a valid address")
+	}
+
+	if len(s.BindDev) == 0 {
+		return errors.New("config: bind_dev is required")
 	}
 
 	if len(s.IPNet) == 0 {
