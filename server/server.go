@@ -86,10 +86,11 @@ func (s *Server) Run(ctx context.Context) error {
 		<-ctx.Done()
 		s.logger.Debug().Msg("Stopping server engine due to parent context cancellation")
 		if err := s.engine.Stop(ctx); nil != err {
-			s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to stop server engine")
-		} else {
-			s.logger.Debug().Msg("Server engine stopped")
+			if !errors.Is(err, ctx.Err()) {
+				s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to stop server engine")
+			}
 		}
+		s.logger.Debug().Msg("Server engine stopped")
 	}()
 
 	opts := []gnet.Option{
@@ -213,6 +214,7 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 			s.clients.Store(prvIP, newClient)
 		}
 	} else {
+		logger.Debug().Msg("New client added")
 		if err := c.SetReadBuffer(s.bufferSize); nil != err {
 			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set read buffer")
 		} else {
