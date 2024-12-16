@@ -14,21 +14,19 @@ type ErrInfo struct {
 }
 
 func (e ErrInfo) LogDict() *zerolog.Event {
-	// var ch []flaw.P
-	// if len(e.Children) > 0 {
-	// 	ch := make([]flaw.P, len(e.Children))
-	// 	for i, child := range e.Children {
-	// 		ch[i] = child.FlawP()
-	// 	}
-	// }
+	children := zerolog.Arr()
+	if len(e.Children) > 0 {
+		for _, child := range e.Children {
+			children.Dict(child.LogDict())
+		}
+	}
 
-	// return flaw.P{
-	// 	"message":     e.Message,
-	// 	"type_name":   e.TypeName,
-	// 	"syntax_repr": e.SyntaxRepr,
-	// 	"children":    ch,
-	// }
-	return nil
+	return zerolog.
+		Dict().
+		Str("message", e.Message).
+		Str("type_name", e.TypeName).
+		Str("syntax_repr", e.SyntaxRepr).
+		Array("children", children)
 }
 
 func Tree(err error) ErrInfo {
