@@ -13,8 +13,10 @@ import (
 	stdlog "log"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -106,7 +108,23 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 		if exists, latestTag, err := update.NewerVersionExists(ctx, Version); nil != err {
 			logger.Error().Err(err).Msg("Failed to check for newer version existence. Make sure you have internet access.")
 		} else if exists {
-			logger.Error().Msgf("Newer version exists. Download it from: https://github.com/xeptore/linkos/releases/download/%s/client_%s_%s.zip", latestTag, runtime.GOOS, runtime.GOARCH)
+			logger.Error().Msg("Newer version exists. Download URL will be opened soon")
+			time.Sleep(time.Second)
+			downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/client_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
+			cmd := []string{"start", downloadURL}
+			if out, err := exec.Command("cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
+				logger.
+					Error().
+					Err(err).
+					Func(func(e *zerolog.Event) {
+						if logger.GetLevel() < zerolog.InfoLevel {
+							e.Str("combined_output", string(out))
+						}
+					}).
+					Str("download_url", downloadURL).
+					Msg("Failed to open download URL. You can still download it manually using the URL.")
+				return nil
+			}
 			return nil
 		}
 	}
