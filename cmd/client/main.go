@@ -319,11 +319,11 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 
 			n, err := conn.Write(p)
 			if nil != err {
-				if errors.Is(err, net.ErrClosed) {
-				} else if netutil.IsConnClosedError(err) {
+				switch {
+				case errors.Is(err, net.ErrClosed):
+				case netutil.IsConnClosedError(err):
 					logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
-					return
-				} else {
+				default:
 					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error sending data to server")
 				}
 				return
