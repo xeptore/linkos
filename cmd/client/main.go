@@ -382,7 +382,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 		case <-ctx.Done():
 			logger.Trace().Msg("Finishing keep-alive loop due to context cancellation")
 			return
-		case <-time.After(5 * time.Second):
+		case <-time.After(config.DefaultKeepAliveIntervalSec * time.Second):
 			logger.Trace().Msg("Sending keep-alive packet")
 			if _, err := conn.Write(packetBytes); nil != err {
 				if netutil.IsConnClosedError(err) {

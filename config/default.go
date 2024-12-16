@@ -14,4 +14,5 @@ const (
 	DefaultServerInitialClientsCap             = 15
 	DefaultServerCleanupIntervalSec            = 5 * 60
 	DefaultServerInactiveConnectionEvictionSec = 10 * 60
+	DefaultKeepAliveIntervalSec                = 25
 )
