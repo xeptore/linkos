@@ -9,6 +9,8 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/rs/zerolog"
+
+	"github.com/xeptore/linkos/errutil"
 )
 
 var dnsServers []string = []string{"149.112.112.112:53", "9.9.9.11:53", "9.9.9.9:53", "208.67.222.222:53", "208.67.220.220:53", "1.0.0.1:53"}
@@ -38,7 +40,7 @@ func ResolveAddr(ctx context.Context, logger zerolog.Logger, hostname string) (n
 				logger.Debug().Err(err).Msg("Breaking hostname IP address resolution due to context cancellation")
 				return nil, ctx.Err()
 			}
-			logger.Debug().Err(err).Msg("Failed to resolve IP address using DNS server")
+			logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to resolve IP address using DNS server")
 			continue
 		}
 

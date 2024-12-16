@@ -28,8 +28,10 @@ import (
 
 	"github.com/xeptore/linkos/client"
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
 	"github.com/xeptore/linkos/log"
+	"github.com/xeptore/linkos/netutil"
 	"github.com/xeptore/linkos/tun"
 	"github.com/xeptore/linkos/update"
 )
@@ -47,7 +49,7 @@ var (
 )
 
 func waitForEnter() {
-	fmt.Fprintln(os.Stdout, "Press enter to exit...")
+	fmt.Fprint(os.Stdout, "Press enter to exit...")
 	bufio.NewReader(io.LimitReader(os.Stdin, 1)).ReadBytes('\n') //nolint:errcheck
 }
 
@@ -106,7 +108,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	if Version != "dev" {
 		logger.Trace().Str("current_version", Version).Msg("Checking for new releases")
 		if exists, latestTag, err := update.NewerVersionExists(ctx, Version); nil != err {
-			logger.Error().Err(err).Msg("Failed to check for newer version existence. Make sure you have internet access.")
+			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to check for newer version existence. Make sure you have internet access.")
 		} else if exists {
 			logger.Error().Msg("Newer version exists. Download URL will be opened soon")
 			time.Sleep(time.Second)
@@ -116,6 +118,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 				logger.
 					Error().
 					Err(err).
+					Dict("err_tree", errutil.Tree(err).LogDict()).
 					Func(func(e *zerolog.Event) {
 						if logger.GetLevel() < zerolog.InfoLevel {
 							e.Str("combined_output", string(out))
@@ -190,7 +193,7 @@ func (c *Client) runLoop(ctx context.Context) {
 		if nil != err {
 			connectFailedAttempts++
 			retryDelaySec := 2 * connectFailedAttempts
-			c.logger.Error().Err(err).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
+			c.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
 			time.Sleep(time.Duration(retryDelaySec) * time.Second)
 		} else {
 			c.logger.Info().Msg("Connected to server")
@@ -199,9 +202,12 @@ func (c *Client) runLoop(ctx context.Context) {
 
 		var wg sync.WaitGroup
 
+		connCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
 		wg.Add(1)
-		context.AfterFunc(ctx, func() {
+		go func() {
 			defer wg.Done()
+			<-connCtx.Done()
 			c.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
 			if err := conn.Close(); nil != err {
 				if !errors.Is(err, net.ErrClosed) {
@@ -210,17 +216,18 @@ func (c *Client) runLoop(ctx context.Context) {
 			} else {
 				c.logger.Trace().Msg("Closed tunnel connection due to parent context closure")
 			}
-		})
+		}()
 
 		wg.Add(2)
 		go c.handleInbound(&wg, conn)
-		go c.keepAlive(ctx, &wg, conn)
+		go c.keepAlive(connCtx, &wg, conn)
 
 		c.handleOutbound(ctx, conn)
+		cancel()
 		c.logger.Debug().Msg("Outbound worker returned. Closing tunnel connection")
 		if err := conn.Close(); nil != err {
 			if !errors.Is(err, net.ErrClosed) {
-				c.logger.Error().Err(err).Msg("Failed to close tunnel connection")
+				c.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to close tunnel connection")
 			}
 		} else {
 			c.logger.Debug().Msg("Closed tunnel connection")
@@ -252,7 +259,7 @@ func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
 				c.logger.Debug().Msg("Ending connect server IP resolution due to context cancellation")
 				return nil, ctx.Err()
 			}
-			c.logger.Error().Err(err).Msg("Failed to resolve server IP address. Retrying in 5 seconds")
+			c.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to resolve server IP address. Retrying in 5 seconds")
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -300,12 +307,12 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 				if errors.Is(err, ctx.Err()) {
 					return
 				}
-				logger.Error().Err(err).Msg("Error reading from TUN device")
+				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error reading from TUN device")
 				return
 			}
 
 			if ok, err := filterOutgoingPacket(logger, p); nil != err {
-				logger.Debug().Err(err).Msg("Failed to filter packet")
+				logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to filter packet")
 			} else if !ok {
 				logger.Trace().Msg("Dropping packet")
 			}
@@ -313,9 +320,12 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 			n, err := conn.Write(p)
 			if nil != err {
 				if errors.Is(err, net.ErrClosed) {
+				} else if netutil.IsConnClosedError(err) {
+					logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
 					return
+				} else {
+					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error sending data to server")
 				}
-				logger.Error().Err(err).Msg("Error sending data to server")
 				return
 			}
 			logger.Trace().Int("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
@@ -329,7 +339,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 
 	gatewayIP, err := iputil.GatewayIP(c.ip, 24)
 	if nil != err {
-		logger.Error().Err(err).Msg("Failed to calculate gatewat IP address from client IP address")
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to calculate gatewat IP address from client IP address")
 		return
 	}
 	logger = logger.With().Str("gateway_ip", gatewayIP.String()).Logger()
@@ -352,7 +362,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	// Marshal the header into a byte slice
 	packet, err := header.Marshal()
 	if nil != err {
-		logger.Error().Err(err).Msg("Failed to marshal keep-alive packet header before checksum calculation")
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to marshal keep-alive packet header before checksum calculation")
 		return
 	}
 
@@ -363,7 +373,7 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	// Marshal the header again with the calculated checksum
 	packetBytes, err := header.Marshal()
 	if nil != err {
-		logger.Error().Err(err).Msg("Failed to marshal keep-alive packet header after checksum calculation")
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to marshal keep-alive packet header after checksum calculation")
 		return
 	}
 
@@ -375,8 +385,12 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 		case <-time.After(5 * time.Second):
 			logger.Trace().Msg("Sending keep-alive packet")
 			if _, err := conn.Write(packetBytes); nil != err {
-				// itsTODO: handle closed/disconnected error
-				logger.Error().Err(err).Msg("Failed to write keep-alive packet to connection")
+				if netutil.IsConnClosedError(err) {
+					logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
+				} else {
+					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write keep-alive packet to connection")
+				}
+				return
 			}
 			logger.Trace().Msg("Sent keep-alive packet")
 		}
@@ -407,7 +421,7 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 			if errors.Is(err, net.ErrClosed) {
 				logger.Trace().Msg("Ending server tunnel worker due to connection closure")
 			} else {
-				logger.Error().Err(err).Msg("Error receiving data from server tunnel")
+				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error receiving data from server tunnel")
 			}
 			return
 		}
@@ -415,7 +429,7 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 
 		n, err = c.t.Write(buffer[:n])
 		if nil != err {
-			logger.Error().Err(err).Msg("Error writing to TUN device")
+			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error writing to TUN device")
 			return
 		}
 		logger.Trace().Int("bytes", n).Msg("Incoming packet has been written to TUN device")

@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/errutil"
 )
 
 type Clients struct {
@@ -72,7 +73,7 @@ func (c *Clients) broadcast(logger zerolog.Logger, conn *net.UDPConn, srcIP net.
 		dstIP := dstAddr.IP.String()
 		logger := logger.With().Str("dst_ip", dstIP).Logger()
 		if _, err := conn.WriteToUDP(packet, dstAddr); nil != err {
-			logger.Error().Err(err).Msg("Failed to broadcast packet")
+			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to broadcast packet")
 		} else {
 			logger.Trace().Msg("Broadcasted packet")
 		}
@@ -92,7 +93,7 @@ func (c *Clients) forward(logger zerolog.Logger, conn *net.UDPConn, dstIP net.IP
 	c.l.RUnlock()
 
 	if _, err := conn.WriteToUDP(packet, dstClient.addr); nil != err {
-		logger.Error().Err(err).Msg("Failed to forward packet")
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to forward packet")
 	} else {
 		logger.Trace().Msg("Forwarded packet")
 	}

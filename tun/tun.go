@@ -16,6 +16,7 @@ import (
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/kernel32"
 	"github.com/xeptore/linkos/winnsapi"
 )
@@ -48,7 +49,7 @@ func New(logger zerolog.Logger) (*Tun, error) {
 	}
 
 	if err := wintun.Uninstall(); nil != err {
-		logger.Warn().Err(err).Msg("Failed to uninstall wintun driver")
+		logger.Warn().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to uninstall wintun driver")
 	}
 
 	logger.Trace().Str("guid", TunGUID).Msg("Creating adapter")
@@ -202,7 +203,7 @@ func (t *Tun) Down() (err error) {
 	defer func() {
 		t.logger.Trace().Msg("Closing StopEvent handle")
 		if stopErr := kernel32.CloseHandle(t.stopEvent); nil != stopErr {
-			t.logger.Error().Err(stopErr).Msg("Failed to close StopEvent handle")
+			t.logger.Error().Err(stopErr).Dict("err_tree", errutil.Tree(stopErr).LogDict()).Msg("Failed to close StopEvent handle")
 		} else {
 			t.logger.Trace().Msg("Closed StopEvent handle")
 		}
