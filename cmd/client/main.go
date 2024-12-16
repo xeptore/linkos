@@ -72,6 +72,7 @@ func main() {
 		return
 	}
 	logger = logger.With().Str("version", Version).Logger()
+	logger.Info().Msg("Starting VPN client")
 
 	if err := run(ctx, logger); nil != err {
 		var createErr tun.CreateError
