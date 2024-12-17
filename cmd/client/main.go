@@ -338,8 +338,10 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 
 			if ok, err := filterOutgoingPacket(logger, p); nil != err {
 				logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to filter packet")
+				continue
 			} else if !ok {
 				logger.Trace().Msg("Dropping packet")
+				continue
 			}
 
 			n, err := conn.Write(p)
