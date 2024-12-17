@@ -160,6 +160,10 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	srcAddr := c.RemoteAddr().String()
 	logger := s.logger.With().Str("src_addr", srcAddr).Logger()
 
+	if n := c.InboundBuffered(); n > 0 {
+		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packet)).Msg("More packets in buffer")
+	}
+
 	if l := len(packet); l < 20 {
 		s.logger.Debug().Int("bytes", l).Msg("Ignoring invalid IP packet")
 		return gnet.None
@@ -212,6 +216,17 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 				Str("stored_client_addr", client.Addr).
 				Msg("Replacing existing client")
 			s.clients.Store(prvIP, newClient)
+			if err := c.SetReadBuffer(s.bufferSize); nil != err {
+				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set read buffer")
+			} else {
+				logger.Debug().Msg("Set connection read buffer size")
+			}
+
+			if err := c.SetWriteBuffer(s.bufferSize); nil != err {
+				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set write buffer")
+			} else {
+				logger.Debug().Msg("Set connection write buffer size")
+			}
 		}
 	} else {
 		logger.Debug().Msg("New client added")
