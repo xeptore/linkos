@@ -187,11 +187,12 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	logger.Info().Msg("VPN tunnel is up")
 
 	client := Client{
-		t:          t,
-		packets:    packets,
-		serverAddr: cfg.ServerAddr,
-		ip:         net.ParseIP(cfg.IP),
-		logger:     logger.With().Str("module", "client").Logger(),
+		t:                t,
+		packets:          packets,
+		serverAddr:       cfg.ServerAddr,
+		ip:               net.ParseIP(cfg.IP),
+		incomingHandlers: cfg.IncomingHandlers,
+		logger:           logger.With().Str("module", "client").Logger(),
 	}
 
 	logger.WithLevel(log.NoLevel).Msg("Starting VPN client")
@@ -199,11 +200,12 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 }
 
 type Client struct {
-	t          *tun.Tun
-	packets    tun.Packets
-	serverAddr string
-	ip         net.IP
-	logger     zerolog.Logger
+	t                *tun.Tun
+	packets          tun.Packets
+	serverAddr       string
+	ip               net.IP
+	incomingHandlers int
+	logger           zerolog.Logger
 }
 
 func (c *Client) runLoop(ctx context.Context) error {
@@ -243,8 +245,12 @@ func (c *Client) runLoop(ctx context.Context) error {
 			}
 		}()
 
-		wg.Add(2)
-		go c.handleInbound(&wg, conn)
+		wg.Add(c.incomingHandlers)
+		for range c.incomingHandlers {
+			go c.handleInbound(&wg, conn)
+		}
+
+		wg.Add(1)
 		go c.keepAlive(connCtx, &wg, conn)
 
 		c.handleOutbound(ctx, conn)
@@ -308,10 +314,10 @@ func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
 	if nil != err {
 		return nil, fmt.Errorf("tunnel: failed to connect to server: %v", err)
 	}
-	if err := conn.SetReadBuffer(config.DefaultClientBufferSize); nil != err {
+	if err := conn.SetReadBuffer(config.DefaultBufferSize); nil != err {
 		return nil, fmt.Errorf("tunnel: failed to set read buffer: %v", err)
 	}
-	if err := conn.SetWriteBuffer(config.DefaultClientBufferSize); nil != err {
+	if err := conn.SetWriteBuffer(config.DefaultBufferSize); nil != err {
 		return nil, fmt.Errorf("tunnel: failed to set write buffer: %v", err)
 	}
 
@@ -338,8 +344,10 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 
 			if ok, err := filterOutgoingPacket(logger, p); nil != err {
 				logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to filter packet")
+				continue
 			} else if !ok {
 				logger.Trace().Msg("Dropping packet")
+				continue
 			}
 
 			n, err := conn.Write(p)
@@ -439,7 +447,7 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 	defer wg.Done()
 	logger := c.logger.With().Str("worker", "incoming").Logger()
 
-	buffer := make([]byte, config.DefaultClientBufferSize)
+	buffer := make([]byte, config.DefaultBufferSize)
 	for {
 		n, _, err := conn.ReadFromUDP(buffer)
 		if nil != err {

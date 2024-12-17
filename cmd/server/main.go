@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/server"
 )
@@ -28,30 +30,35 @@ func main() {
 	}
 	logger = logger.With().Str("version", Version).Logger()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	defer func() {
-		logger.Trace().Msg("Waiting for signal listener goroutine to return")
-		wg.Wait()
-		logger.Trace().Msg("Signal listener goroutine returned")
-	}()
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		<-c
-		logger.Info().Msg("Close signal received. Exiting...")
-		signal.Stop(c)
-		cancel()
+		select {
+		case <-ctx.Done():
+			logger.Trace().Msg("Context canceled before receiving a close signal")
+		case <-c:
+			logger.Info().Msg("Close signal received. Exiting...")
+			signal.Stop(c)
+			cancel()
+		}
 	}()
 
 	logger.WithLevel(log.NoLevel).Msg("Starting server")
 
 	if err := run(ctx, logger); nil != err {
-		logger.Error().Err(err).Msg("Failed to run the application")
-		return
+		if !errors.Is(err, ctx.Err()) {
+			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to run server")
+		}
 	}
+
+	cancel()
+	logger.Trace().Msg("Waiting for signal listener goroutine to return")
+	wg.Wait()
+	logger.Trace().Msg("Signal listener goroutine returned. Exiting...")
 }
 
 func run(ctx context.Context, logger zerolog.Logger) error {
@@ -62,10 +69,9 @@ func run(ctx context.Context, logger zerolog.Logger) error {
 	logger = logger.Level(cfg.LogLevel)
 	logger.Debug().Dict("config", cfg.LogDict()).Msg("Loaded configuration")
 
-	srv, err := server.New(logger, cfg.IPNet, cfg.BindAddr, cfg.BufferSize)
+	srv, err := server.New(logger, cfg.IPNet, cfg.BindAddr, cfg.BindDev, cfg.BufferSize)
 	if nil != err {
-		return fmt.Errorf("server: failed to initialize: %v", err)
+		return fmt.Errorf("server: failed to create server: %v", err)
 	}
-
 	return srv.Run(ctx)
 }

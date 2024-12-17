@@ -51,6 +51,7 @@ tasks:
             -a \
             -buildvcs=true \
             -trimpath \
+            -tags='poll_opt gc_opt' \
             -ldflags="-X 'main.Version={{default "dev" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
             -o ./bin/server/linkos \
             ./cmd/server
