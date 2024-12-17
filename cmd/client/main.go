@@ -308,10 +308,10 @@ func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
 	if nil != err {
 		return nil, fmt.Errorf("tunnel: failed to connect to server: %v", err)
 	}
-	if err := conn.SetReadBuffer(config.DefaultClientBufferSize); nil != err {
+	if err := conn.SetReadBuffer(config.DefaultBufferSize); nil != err {
 		return nil, fmt.Errorf("tunnel: failed to set read buffer: %v", err)
 	}
-	if err := conn.SetWriteBuffer(config.DefaultClientBufferSize); nil != err {
+	if err := conn.SetWriteBuffer(config.DefaultBufferSize); nil != err {
 		return nil, fmt.Errorf("tunnel: failed to set write buffer: %v", err)
 	}
 
@@ -441,7 +441,7 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 	defer wg.Done()
 	logger := c.logger.With().Str("worker", "incoming").Logger()
 
-	buffer := make([]byte, config.DefaultClientBufferSize)
+	buffer := make([]byte, config.DefaultBufferSize)
 	for {
 		n, _, err := conn.ReadFromUDP(buffer)
 		if nil != err {
