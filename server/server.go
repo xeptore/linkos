@@ -245,7 +245,7 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	}
 
 	switch {
-	case dstIP.Equal(s.subnetIPNet.IP):
+	case dstIP.Equal(s.gatewayIP):
 		logger.Debug().Msg("Handling keep-alive packet")
 		client.l.Lock()
 		client.LastKeepAlive = time.Now().Unix()
