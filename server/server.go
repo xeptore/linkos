@@ -43,7 +43,7 @@ type (
 	}
 )
 
-func NewServer(logger zerolog.Logger, ipNet, bindAddr, bindDev string, bufferSize int) (*Server, error) {
+func New(logger zerolog.Logger, ipNet, bindAddr, bindDev string, bufferSize int) (*Server, error) {
 	ip, subnetIPNet, err := net.ParseCIDR(ipNet)
 	if nil != err {
 		return nil, fmt.Errorf("server: error parsing subnet CIDR: %v", err)

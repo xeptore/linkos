@@ -69,7 +69,7 @@ func run(ctx context.Context, logger zerolog.Logger) error {
 	logger = logger.Level(cfg.LogLevel)
 	logger.Debug().Dict("config", cfg.LogDict()).Msg("Loaded configuration")
 
-	srv, err := server.NewServer(logger, cfg.IPNet, cfg.BindAddr, cfg.BindDev, cfg.BufferSize)
+	srv, err := server.New(logger, cfg.IPNet, cfg.BindAddr, cfg.BindDev, cfg.BufferSize)
 	if nil != err {
 		return fmt.Errorf("server: failed to create server: %v", err)
 	}
