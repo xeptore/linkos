@@ -143,6 +143,7 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 		client.l.Lock()
 		if now-client.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold {
 			client.Disconnected = true
+			s.logger.Debug().Str("client_ip", ip).Msg("Marked client as disconnected due to passing missed keep-alive threshold")
 		}
 		client.l.Unlock()
 		return true
@@ -265,9 +266,8 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 			return true
 		})
 	default:
-		logger.Debug().Msg("Received packet")
+		logger.Debug().Msg("Forwarding packet")
 		if client, ok := s.clients.Load(dstIP.String()); ok {
-			logger.Debug().Msg("Forwarding packet to client")
 			if _, err := client.Conn.Write(packet); nil != err {
 				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write packet")
 			} else {
