@@ -317,10 +317,10 @@ func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
 	if nil != err {
 		return nil, fmt.Errorf("tunnel: failed to connect to server: %v", err)
 	}
-	if err := conn.SetReadBuffer(config.DefaultBufferSize); nil != err {
+	if err := conn.SetReadBuffer(c.bufferSize); nil != err {
 		return nil, fmt.Errorf("tunnel: failed to set read buffer: %v", err)
 	}
-	if err := conn.SetWriteBuffer(config.DefaultBufferSize); nil != err {
+	if err := conn.SetWriteBuffer(c.bufferSize); nil != err {
 		return nil, fmt.Errorf("tunnel: failed to set write buffer: %v", err)
 	}
 
