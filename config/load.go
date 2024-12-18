@@ -165,7 +165,7 @@ func validateBufferSize(n int) error {
 }
 
 func validateMTU(n uint32) error {
-	if n < 0 || n > 65535 {
+	if n > 65535 {
 		return errors.New("out of range")
 	}
 	return nil
