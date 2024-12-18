@@ -14,10 +14,10 @@ import (
 )
 
 type Client struct {
-	ServerAddr       string
-	IP               string
-	IncomingHandlers int
-	LogLevel         zerolog.Level
+	ServerAddr      string
+	IP              string
+	IncomingThreads int
+	LogLevel        zerolog.Level
 }
 
 func (c *Client) LogDict() *zerolog.Event {
@@ -25,7 +25,7 @@ func (c *Client) LogDict() *zerolog.Event {
 		Dict().
 		Str("server_address", c.ServerAddr).
 		Str("ip", c.IP).
-		Int("incoming_handlers", c.IncomingHandlers).
+		Int("incoming_threads", c.IncomingThreads).
 		Str("log_level", c.LogLevel.String())
 }
 
@@ -40,26 +40,26 @@ func LoadClient(filename string) (*Client, error) {
 
 	serverAddr := strings.TrimSpace(cfg.Section("").Key("server_address").String())
 
-	incomingHandlers := 4
-	incomingHandlersStr := strings.TrimSpace(cfg.Section("").Key("incoming_handlers").String())
-	if len(incomingHandlersStr) != 0 {
-		i, err := strconv.Atoi(incomingHandlersStr)
+	incomingThreads := 4
+	incomingThreadsStr := strings.TrimSpace(cfg.Section("").Key("incoming_threads").String())
+	if len(incomingThreadsStr) != 0 {
+		i, err := strconv.Atoi(incomingThreadsStr)
 		if nil != err {
-			return nil, fmt.Errorf("config: invalid value of %q for incoming_handlers configuration option, expected an integer", incomingHandlersStr)
+			return nil, fmt.Errorf("config: invalid value of %q for incoming_threads configuration option, expected an integer", incomingThreadsStr)
 		} else {
-			incomingHandlers = i
+			incomingThreads = i
 		}
 	}
 
-	tunIP := strings.TrimSpace(cfg.Section("").Key("ip").String())
+	ip := strings.TrimSpace(cfg.Section("").Key("ip").String())
 
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 
 	out := Client{
-		ServerAddr:       serverAddr,
-		IP:               tunIP,
-		IncomingHandlers: incomingHandlers,
-		LogLevel:         DefaultClientLogLevel,
+		ServerAddr:      serverAddr,
+		IP:              ip,
+		IncomingThreads: incomingThreads,
+		LogLevel:        DefaultClientLogLevel,
 	}
 
 	if logLevel != "" {
@@ -88,8 +88,8 @@ func (c *Client) validate() error {
 		return errors.New("config: ip is not a valid IP address")
 	}
 
-	if c.IncomingHandlers < 1 {
-		return errors.New("config: incoming_handlers must be greater than or equal to 1")
+	if c.IncomingThreads < 1 {
+		return errors.New("config: incoming_threads must be greater than or equal to 1")
 	}
 
 	if len(c.ServerAddr) == 0 {

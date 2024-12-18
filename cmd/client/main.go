@@ -187,12 +187,12 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	logger.Info().Msg("VPN tunnel is up")
 
 	client := Client{
-		t:                t,
-		packets:          packets,
-		serverAddr:       cfg.ServerAddr,
-		ip:               net.ParseIP(cfg.IP),
-		incomingHandlers: cfg.IncomingHandlers,
-		logger:           logger.With().Str("module", "client").Logger(),
+		t:               t,
+		packets:         packets,
+		serverAddr:      cfg.ServerAddr,
+		ip:              net.ParseIP(cfg.IP),
+		incomingThreads: cfg.IncomingThreads,
+		logger:          logger.With().Str("module", "client").Logger(),
 	}
 
 	logger.WithLevel(log.NoLevel).Msg("Starting VPN client")
@@ -200,12 +200,12 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 }
 
 type Client struct {
-	t                *tun.Tun
-	packets          tun.Packets
-	serverAddr       string
-	ip               net.IP
-	incomingHandlers int
-	logger           zerolog.Logger
+	t               *tun.Tun
+	packets         tun.Packets
+	serverAddr      string
+	ip              net.IP
+	incomingThreads int
+	logger          zerolog.Logger
 }
 
 func (c *Client) runLoop(ctx context.Context) error {
@@ -245,8 +245,8 @@ func (c *Client) runLoop(ctx context.Context) error {
 			}
 		}()
 
-		wg.Add(c.incomingHandlers)
-		for range c.incomingHandlers {
+		wg.Add(c.incomingThreads)
+		for range c.incomingThreads {
 			go c.handleInbound(&wg, conn)
 		}
 
