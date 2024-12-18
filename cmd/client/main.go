@@ -345,6 +345,15 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 				return
 			}
 
+			if len(p) > c.bufferSize {
+				logger.
+					Error().
+					Int("packet_size", len(p)).
+					Int("buffer_size", c.bufferSize).
+					Msg("Packet size exceeds buffer size. Dropping packet")
+				continue
+			}
+
 			if ok, err := filterOutgoingPacket(logger, p); nil != err {
 				logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to filter packet")
 				continue
