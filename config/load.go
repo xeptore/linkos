@@ -17,6 +17,7 @@ type Client struct {
 	ServerAddr      string
 	IP              string
 	IncomingThreads int
+	BufferSize      int
 	LogLevel        zerolog.Level
 }
 
@@ -26,6 +27,7 @@ func (c *Client) LogDict() *zerolog.Event {
 		Str("server_address", c.ServerAddr).
 		Str("ip", c.IP).
 		Int("incoming_threads", c.IncomingThreads).
+		Int("buffer_size", c.BufferSize).
 		Str("log_level", c.LogLevel.String())
 }
 
@@ -51,6 +53,16 @@ func LoadClient(filename string) (*Client, error) {
 		}
 	}
 
+	bufferSize := DefaultBufferSize
+	bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String())
+	if len(bufferSizeStr) != 0 {
+		if i, err := strconv.Atoi(bufferSizeStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for buffer_size configuration option, expected an integer", bufferSizeStr)
+		} else {
+			bufferSize = i
+		}
+	}
+
 	ip := strings.TrimSpace(cfg.Section("").Key("ip").String())
 
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
@@ -59,6 +71,7 @@ func LoadClient(filename string) (*Client, error) {
 		ServerAddr:      serverAddr,
 		IP:              ip,
 		IncomingThreads: incomingThreads,
+		BufferSize:      bufferSize,
 		LogLevel:        DefaultClientLogLevel,
 	}
 
@@ -167,6 +180,7 @@ func LoadServer(filename string) (*Server, error) {
 	bindDev := strings.TrimSpace(cfg.Section("").Key("bind_dev").String())
 	ipNet := strings.TrimSpace(cfg.Section("").Key("ip_net").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
+
 	bufferSize := DefaultBufferSize
 	bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String())
 	if len(bufferSizeStr) != 0 {

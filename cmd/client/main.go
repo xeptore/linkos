@@ -192,6 +192,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 		serverAddr:      cfg.ServerAddr,
 		ip:              net.ParseIP(cfg.IP),
 		incomingThreads: cfg.IncomingThreads,
+		bufferSize:      cfg.BufferSize,
 		logger:          logger.With().Str("module", "client").Logger(),
 	}
 
@@ -205,6 +206,7 @@ type Client struct {
 	serverAddr      string
 	ip              net.IP
 	incomingThreads int
+	bufferSize      int
 	logger          zerolog.Logger
 }
 
@@ -447,7 +449,7 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 	defer wg.Done()
 	logger := c.logger.With().Str("worker", "incoming").Logger()
 
-	buffer := make([]byte, config.DefaultBufferSize)
+	buffer := make([]byte, c.bufferSize)
 	for {
 		n, _, err := conn.ReadFromUDP(buffer)
 		if nil != err {
