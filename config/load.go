@@ -18,6 +18,7 @@ type Client struct {
 	IP              string
 	IncomingThreads int
 	BufferSize      int
+	MTU             uint32
 	LogLevel        zerolog.Level
 }
 
@@ -28,6 +29,7 @@ func (c *Client) LogDict() *zerolog.Event {
 		Str("ip", c.IP).
 		Int("incoming_threads", c.IncomingThreads).
 		Int("buffer_size", c.BufferSize).
+		Uint32("mtu", c.MTU).
 		Str("log_level", c.LogLevel.String())
 }
 
@@ -43,8 +45,7 @@ func LoadClient(filename string) (*Client, error) {
 	serverAddr := strings.TrimSpace(cfg.Section("").Key("server_address").String())
 
 	incomingThreads := 4
-	incomingThreadsStr := strings.TrimSpace(cfg.Section("").Key("incoming_threads").String())
-	if len(incomingThreadsStr) != 0 {
+	if incomingThreadsStr := strings.TrimSpace(cfg.Section("").Key("incoming_threads").String()); len(incomingThreadsStr) != 0 {
 		i, err := strconv.Atoi(incomingThreadsStr)
 		if nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for incoming_threads configuration option, expected an integer", incomingThreadsStr)
@@ -54,12 +55,20 @@ func LoadClient(filename string) (*Client, error) {
 	}
 
 	bufferSize := DefaultBufferSize
-	bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String())
-	if len(bufferSizeStr) != 0 {
+	if bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String()); len(bufferSizeStr) != 0 {
 		if i, err := strconv.Atoi(bufferSizeStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for buffer_size configuration option, expected an integer", bufferSizeStr)
 		} else {
 			bufferSize = i
+		}
+	}
+
+	var mtu uint32 = DefaultClientTunDeviceMTU
+	if mtuStr := strings.TrimSpace(cfg.Section("").Key("mtu").String()); len(mtuStr) != 0 {
+		if i, err := strconv.ParseUint(mtuStr, 10, 32); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for mtu configuration option, expected an integer", mtuStr)
+		} else {
+			mtu = uint32(i)
 		}
 	}
 
@@ -72,6 +81,7 @@ func LoadClient(filename string) (*Client, error) {
 		IP:              ip,
 		IncomingThreads: incomingThreads,
 		BufferSize:      bufferSize,
+		MTU:             mtu,
 		LogLevel:        DefaultClientLogLevel,
 	}
 
@@ -118,6 +128,14 @@ func (c *Client) validate() error {
 		}
 	}
 
+	if err := validateBufferSize(c.BufferSize); nil != err {
+		return fmt.Errorf("config: buffer_size is invalid: %v", err)
+	}
+
+	if err := validateMTU(c.MTU); nil != err {
+		return fmt.Errorf("config: mtu is invalid: %v", err)
+	}
+
 	return nil
 }
 
@@ -131,10 +149,24 @@ func isValidHostname(host string) bool {
 func validatePort(port string) error {
 	p, err := strconv.Atoi(port)
 	if nil != err {
-		return errors.New("port must be a number")
+		return errors.New("must be a number")
 	}
 	if p < 0 || p > 65535 {
-		return errors.New("port out of range")
+		return errors.New("out of range")
+	}
+	return nil
+}
+
+func validateBufferSize(n int) error {
+	if n < 0 || n > 65535 {
+		return errors.New("out of range")
+	}
+	return nil
+}
+
+func validateMTU(n uint32) error {
+	if n < 0 || n > 65535 {
+		return errors.New("out of range")
 	}
 	return nil
 }
@@ -182,8 +214,7 @@ func LoadServer(filename string) (*Server, error) {
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 
 	bufferSize := DefaultBufferSize
-	bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String())
-	if len(bufferSizeStr) != 0 {
+	if bufferSizeStr := strings.TrimSpace(cfg.Section("").Key("buffer_size").String()); len(bufferSizeStr) != 0 {
 		if i, err := strconv.Atoi(bufferSizeStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for buffer_size configuration option, expected an integer", bufferSizeStr)
 		} else {
@@ -233,6 +264,10 @@ func (s *Server) validate() error {
 		return errors.New("config: ip_net is required")
 	} else if _, _, err := net.ParseCIDR(s.IPNet); nil != err {
 		return errors.New("config: ip_net must be a valid CIDR notation")
+	}
+
+	if err := validateBufferSize(s.BufferSize); nil != err {
+		return fmt.Errorf("config: buffer_size is invalid: %v", err)
 	}
 
 	return nil

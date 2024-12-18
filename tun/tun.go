@@ -15,7 +15,6 @@ import (
 	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/kernel32"
 	"github.com/xeptore/linkos/winnsapi"
@@ -128,7 +127,7 @@ func (t *Tun) AssignIPv4(ip string) error {
 	return nil
 }
 
-func (t *Tun) SetIPv4Options() error {
+func (t *Tun) SetIPv4Options(mtu uint32) error {
 	luid := winipcfg.LUID(t.adapter.LUID())
 	iface, err := luid.IPInterface(afInetFamily)
 	if nil != err {
@@ -139,7 +138,7 @@ func (t *Tun) SetIPv4Options() error {
 	iface.DadTransmits = 0
 	iface.ManagedAddressConfigurationSupported = false
 	iface.OtherStatefulConfigurationSupported = false
-	iface.NLMTU = config.DefaultClientTunDeviceMTU
+	iface.NLMTU = mtu
 	iface.Connected = true
 	iface.DisableDefaultRoutes = true
 	iface.Metric = 0

@@ -167,7 +167,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	logger.Info().Msg("Assigned IP address to tunnel adapter")
 
 	logger.Debug().Msg("Setting adapter IPv4 options")
-	if err := t.SetIPv4Options(); nil != err {
+	if err := t.SetIPv4Options(cfg.MTU); nil != err {
 		return fmt.Errorf("tun: failed to set adapter IPv4 options: %v", err)
 	}
 	logger.Debug().Msg("Set adapter IPv4 options")
