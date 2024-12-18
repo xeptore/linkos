@@ -151,6 +151,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 			}
 			return nil
 		}
+		logger.Info().Msg("Already running the latest version")
 	}
 
 	logger.Trace().Msg("Initializing VPN tunnel")
