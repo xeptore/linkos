@@ -17,24 +17,20 @@ import (
 
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/kernel32"
+	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/winnsapi"
 )
 
-const (
-	TunGUID     = "{BF663C0F-5A47-4720-A8CB-BEFD5A7A4633}"
-	TunRingSize = 0x400000
-)
+const TunGUID = "{BF663C0F-5A47-4720-A8CB-BEFD5A7A4633}"
 
-type (
-	Packet  []byte
-	Packets <-chan mo.Result[Packet]
-)
+type Packets <-chan mo.Result[*pool.Packet]
 
 type Tun struct {
 	adapter   *wintun.Adapter
 	session   wintun.Session
 	stopEvent windows.Handle
 	logger    zerolog.Logger
+	pool      *pool.PacketPool
 }
 
 type CreateError struct {
@@ -45,7 +41,7 @@ func (err *CreateError) Error() string {
 	return err.Err.Error()
 }
 
-func New(logger zerolog.Logger) (*Tun, error) {
+func New(logger zerolog.Logger, ringSize uint32, pool *pool.PacketPool) (*Tun, error) {
 	logger.Debug().Str("version", wintun.Version()).Msg("Loading wintun")
 
 	guid, err := windows.GUIDFromString(TunGUID)
@@ -65,7 +61,7 @@ func New(logger zerolog.Logger) (*Tun, error) {
 	logger.Debug().Msg("Adapter created")
 
 	logger.Trace().Msg("Starting session")
-	session, err := adapter.StartSession(TunRingSize)
+	session, err := adapter.StartSession(ringSize)
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to start session: %v", err)
 	}
@@ -81,6 +77,7 @@ func New(logger zerolog.Logger) (*Tun, error) {
 		session:   session,
 		stopEvent: stopEvent,
 		logger:    logger,
+		pool:      pool,
 	}, nil
 }
 
@@ -153,15 +150,15 @@ func (t *Tun) SetIPv4Options(mtu uint32) error {
 func (t *Tun) Up(ctx context.Context) (Packets, error) {
 	readEvent := t.session.ReadWaitEvent()
 
-	out := make(chan mo.Result[Packet])
+	out := make(chan mo.Result[*pool.Packet])
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				out <- mo.Err[Packet](ctx.Err())
+				out <- mo.Err[*pool.Packet](ctx.Err())
 				return
 			default:
-				pckt, err := t.session.ReceivePacket()
+				packet, err := t.session.ReceivePacket()
 				if nil != err {
 					switch {
 					case errors.Is(err, windows.ERROR_NO_MORE_ITEMS):
@@ -172,24 +169,34 @@ func (t *Tun) Up(ctx context.Context) (Packets, error) {
 						case windows.WAIT_OBJECT_0 + 1:
 							return
 						default:
-							out <- mo.Err[Packet](fmt.Errorf("tun: unexpected result from wait to events: %v", err))
+							out <- mo.Err[*pool.Packet](fmt.Errorf("tun: unexpected result from wait to events: %v", err))
 						}
 					case errors.Is(err, windows.ERROR_HANDLE_EOF):
-						out <- mo.Err[Packet](fmt.Errorf("tun: expected StopEvent to be set before closing the session: %v", err))
+						out <- mo.Err[*pool.Packet](fmt.Errorf("tun: expected StopEvent to be set before closing the session: %v", err))
 						return
 					case errors.Is(err, windows.ERROR_INVALID_DATA):
-						out <- mo.Err[Packet](errors.New("tun: send ring corrupt"))
+						out <- mo.Err[*pool.Packet](errors.New("tun: send ring corrupt"))
 						return
 					default:
-						out <- mo.Err[Packet](fmt.Errorf("tun: unexpected error received from session: %v", err))
+						out <- mo.Err[*pool.Packet](fmt.Errorf("tun: unexpected error received from session: %v", err))
 						return
 					}
 				}
 
-				pcktClone := make([]byte, len(pckt))
-				copy(pcktClone, pckt)
-				t.session.ReleaseReceivePacket(pckt)
-				out <- mo.Ok(Packet(pcktClone))
+				packetLen := len(packet)
+				if packetLen > t.pool.PacketMaxSize {
+					t.logger.Error().
+						Int("packet_size", packetLen).
+						Int("buffer_size", t.pool.PacketMaxSize).
+						Msg("Packet received from TUN exceeds buffer size. Dropping packet")
+					continue
+				}
+
+				clone := t.pool.AcquirePacket()
+				clone.Payload.Write(packet)
+				t.session.ReleaseReceivePacket(packet)
+				clone.Size = packetLen
+				out <- mo.Ok(clone)
 			}
 		}
 	}()
@@ -197,7 +204,7 @@ func (t *Tun) Up(ctx context.Context) (Packets, error) {
 	return out, nil
 }
 
-func (t *Tun) ReleasePacketBuffer(p Packet) {
+func (t *Tun) ReleasePacketBuffer(p []byte) {
 	t.session.ReleaseReceivePacket(p)
 }
 

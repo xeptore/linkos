@@ -95,7 +95,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	opts := []gnet.Option{
 		gnet.WithMulticore(true),
-		gnet.WithNumEventLoop(config.DefaultServerInitialAllocatedClients),
 		gnet.WithLoadBalancing(gnet.SourceAddrHash),
 		gnet.WithReuseAddr(false),
 		gnet.WithReusePort(false),
