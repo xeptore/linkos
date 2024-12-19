@@ -12,9 +12,10 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
-	"github.com/xeptore/linkos/mathutil"
 	"golang.zx2c4.com/wintun"
 	"gopkg.in/ini.v1"
+
+	"github.com/xeptore/linkos/mathutil"
 )
 
 type Client struct {

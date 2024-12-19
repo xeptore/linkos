@@ -11,7 +11,7 @@ const (
 	DefaultClientIncomingThreads         = 4
 	DefaultClientTunDeviceMTU            = 1280
 	DefaultBufferSize                    = 1280
-	DefaultServerInitialAllocatedClients = 15
+	DefaultServerInitialAllocatedClients = 10
 	DefaultServerCleanupIntervalSec      = 10 * 60
 	DefaultKeepAliveIntervalSec          = 10
 	DefaultMissedKeepAliveThreshold      = 5

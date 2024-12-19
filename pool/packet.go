@@ -33,8 +33,6 @@ type Packet struct {
 }
 
 func (b *Packet) ReturnToPool() {
-	b.Payload.Reset()
-	b.Size = 0
 	b.pool.Put(b.Payload)
 }
 
