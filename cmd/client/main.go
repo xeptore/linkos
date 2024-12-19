@@ -32,6 +32,7 @@ import (
 	"github.com/xeptore/linkos/iputil"
 	"github.com/xeptore/linkos/log"
 	"github.com/xeptore/linkos/netutil"
+	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/tun"
 	"github.com/xeptore/linkos/update"
 )
@@ -154,8 +155,10 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 		logger.Info().Msg("Already running the latest version")
 	}
 
+	packetPool := pool.New(cfg.BufferSize)
+
 	logger.Trace().Msg("Initializing VPN tunnel")
-	t, err := tun.New(logger.With().Str("module", "tun").Logger())
+	t, err := tun.New(logger.With().Str("module", "tun").Logger(), cfg.RingSize, packetPool)
 	if nil != err {
 		return fmt.Errorf("tun: failed to create: %w", err)
 	}
@@ -345,37 +348,37 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 				return
 			}
 
-			if len(p) > c.bufferSize {
-				logger.
-					Error().
-					Int("packet_size", len(p)).
-					Int("buffer_size", c.bufferSize).
-					Msg("Packet size exceeds buffer size. Dropping packet")
-				continue
-			}
-
-			if ok, err := filterOutgoingPacket(logger, p); nil != err {
-				logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to filter packet")
-				continue
-			} else if !ok {
-				logger.Trace().Msg("Dropping packet")
-				continue
-			}
-
-			n, err := conn.Write(p)
-			if nil != err {
-				switch {
-				case errors.Is(err, net.ErrClosed):
-				case netutil.IsConnClosedError(err):
-					logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
-				default:
-					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error sending data to server")
-				}
+			if err := sendAndReleasePacket(logger, conn, p); nil != err {
 				return
 			}
-			logger.Trace().Int("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
 		}
 	}
+}
+
+func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, packet *pool.Packet) error {
+	defer packet.ReturnToPool()
+
+	if ok, err := filterOutgoingPacket(logger, packet.Payload.Bytes()); nil != err {
+		logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to filter packet")
+		return nil
+	} else if !ok {
+		logger.Trace().Msg("Dropping filtered packet")
+		return nil
+	}
+
+	n, err := io.CopyN(conn, packet.Payload, int64(packet.Size))
+	if nil != err {
+		switch {
+		case errors.Is(err, net.ErrClosed):
+		case netutil.IsConnClosedError(err):
+			logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
+		default:
+			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error sending data to server")
+		}
+		return err
+	}
+	logger.Trace().Int64("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
+	return nil
 }
 
 func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
@@ -489,7 +492,7 @@ func determineVersion(packet []byte) (int, error) {
 	return int(packet[0] >> 4), nil
 }
 
-func filterOutgoingPacket(logger zerolog.Logger, p tun.Packet) (bool, error) {
+func filterOutgoingPacket(logger zerolog.Logger, p []byte) (bool, error) {
 	v, err := determineVersion(p)
 	if nil != err {
 		return false, err

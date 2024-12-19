@@ -12,7 +12,8 @@ require (
 	github.com/samber/mo v1.13.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/net v0.32.0
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
+	golang.org/x/net v0.33.0
 	golang.org/x/sys v0.28.0
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 	golang.zx2c4.com/wireguard/windows v0.5.3
