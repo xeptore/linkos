@@ -90,6 +90,12 @@ func (s *Server) Run(ctx context.Context) error {
 				s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to stop server engine")
 			}
 		}
+		s.clients.Range(func(ip string, c *Client) bool {
+			if err := c.Conn.Close(); nil != err {
+				s.logger.Error().Err(err).Str("ip", ip).Msg("Failed to close client connection")
+			}
+			return true
+		})
 		s.logger.Debug().Msg("Server engine stopped")
 	}()
 
@@ -144,6 +150,11 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 		if now-client.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold {
 			client.Disconnected = true
 			s.logger.Debug().Str("client_ip", ip).Msg("Marked client as disconnected due to passing missed keep-alive threshold")
+			if err := client.Conn.Close(); nil != err {
+				s.logger.Error().Err(err).Msg("Failed to close stale client connection")
+			} else {
+				s.logger.Debug().Msg("Closed stale client connection")
+			}
 		}
 		client.l.Unlock()
 		return true
@@ -216,13 +227,15 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 				Bool("is_disconnected", isDisconnected).
 				Str("stored_client_addr", client.Addr).
 				Msg("Replacing existing client")
+			if err := client.Conn.Close(); nil != err {
+				s.logger.Error().Err(err).Msg("Failed to close previous client connection")
+			}
 			s.clients.Store(prvIP, newClient)
 			if err := c.SetReadBuffer(s.bufferSize); nil != err {
 				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set read buffer")
 			} else {
 				logger.Debug().Msg("Set connection read buffer size")
 			}
-
 			if err := c.SetWriteBuffer(s.bufferSize); nil != err {
 				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set write buffer")
 			} else {
@@ -236,7 +249,6 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 		} else {
 			logger.Debug().Msg("Set connection read buffer size")
 		}
-
 		if err := c.SetWriteBuffer(s.bufferSize); nil != err {
 			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set write buffer")
 		} else {
