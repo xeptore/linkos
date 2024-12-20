@@ -71,6 +71,12 @@ func main() {
 	logger = logger.With().Str("version", Version).Logger()
 	logger.Info().Msg("Starting VPN client")
 
+	defer func() {
+		if err := recover(); nil != err {
+			logger.Error().Func(log.Panic(err)).Msg("Panic recovered")
+		}
+	}()
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
 
