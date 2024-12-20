@@ -3,13 +3,20 @@ package update
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/google/go-github/v67/github"
+	"github.com/rs/zerolog"
+
+	"github.com/xeptore/linkos/dnsutil"
 )
 
-func NewerVersionExists(ctx context.Context, currentVersion string) (exists bool, latestTag string, err error) {
-	client := github.NewClient(nil)
+func NewerVersionExists(ctx context.Context, logger zerolog.Logger, currentVersion string) (exists bool, latestTag string, err error) {
+	httpClient := http.DefaultClient
+
+	httpClient.Transport = dnsutil.FromRoundTripper(http.DefaultTransport)
+	client := github.NewClient(httpClient)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

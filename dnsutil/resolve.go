@@ -1,10 +1,11 @@
-package client
+package dnsutil
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"time"
 
 	"github.com/miekg/dns"
@@ -29,7 +30,7 @@ func ResolveAddr(ctx context.Context, logger zerolog.Logger, hostname string) (n
 
 		client := new(dns.Client)
 		client.Net = "tcp"
-		client.Timeout = 5 * time.Second
+		client.Timeout = 3 * time.Second
 
 		message := new(dns.Msg)
 		message.SetQuestion(dns.Fqdn(hostname), dns.TypeA)
@@ -53,5 +54,23 @@ func ResolveAddr(ctx context.Context, logger zerolog.Logger, hostname string) (n
 		}
 	}
 
-	return nil, fmt.Errorf("failed to resolve hostname %s", hostname)
+	return nil, fmt.Errorf("dnsutil: failed to resolve hostname %s", hostname)
+}
+
+type Transport struct {
+	Transport http.RoundTripper
+	Logger    zerolog.Logger
+}
+
+func (c *Transport) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	ip, err := ResolveAddr(ctx, c.Logger, addr)
+	if nil != err {
+		return nil, fmt.Errorf("dnsutil: failed to resolve query: %v", err)
+	}
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", ip, 443)) // Port 443 for HTTPS
+	if err != nil {
+		return nil, fmt.Errorf("dnsutil: failed to dial TCP connection: %v", err)
+	}
+	return conn, nil
 }

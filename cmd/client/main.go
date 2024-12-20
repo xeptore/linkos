@@ -26,8 +26,8 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/ipv4"
 
-	"github.com/xeptore/linkos/client"
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/dnsutil"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
 	"github.com/xeptore/linkos/log"
@@ -140,8 +140,9 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 
 	if Version != "dev" {
 		logger.Trace().Str("current_version", Version).Msg("Checking for new releases")
-		if exists, latestTag, err := update.NewerVersionExists(ctx, Version); nil != err {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to check for newer version existence. Make sure you have internet access.")
+		if exists, latestTag, err := update.NewerVersionExists(ctx, logger, Version); nil != err {
+			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to check for newer version existence. Make sure you have internet access and rerun the application.")
+			return nil
 		} else if exists {
 			logger.Error().Msg("Newer version exists. Download URL will be opened soon")
 			time.Sleep(time.Second)
@@ -290,7 +291,7 @@ func (c *Client) connect(ctx context.Context) (*net.UDPConn, error) {
 
 	var serverIP net.IP
 	for {
-		ip, err := client.ResolveAddr(ctx, c.logger, serverHostname)
+		ip, err := dnsutil.ResolveAddr(ctx, c.logger, serverHostname)
 		if nil != err {
 			if errors.Is(err, ctx.Err()) {
 				c.logger.Debug().Msg("Ending connect server IP resolution due to context cancellation")
