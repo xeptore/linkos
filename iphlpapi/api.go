@@ -11,10 +11,11 @@ package iphlpapi
 import "C"
 
 import (
-	"errors"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/xeptore/linkos/win"
 )
 
 var (
@@ -29,8 +30,7 @@ func InitializeUnicastIPAddressEntry() (row C.MIB_UNICASTIPADDRESS_ROW) {
 }
 
 func CreateUnicastIPAddressEntry(row *C.MIB_UNICASTIPADDRESS_ROW) error {
-	ret, _, _ := createUnicastIPAddressEntry.Call(uintptr(unsafe.Pointer(row)))
-	if err := windows.Errno(ret); !errors.Is(err, windows.ERROR_SUCCESS) {
+	if _, _, err := createUnicastIPAddressEntry.Call(uintptr(unsafe.Pointer(row))); !win.IsErrSuccess(err) {
 		return err
 	}
 	return nil

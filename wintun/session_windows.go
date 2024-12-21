@@ -10,6 +10,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/xeptore/linkos/win"
 )
 
 type Session struct {
@@ -39,14 +41,12 @@ var (
 	procWintunStartSession         = modwintun.NewProc("WintunStartSession")
 )
 
-func (wintun *Adapter) StartSession(capacity uint32) (session Session, err error) {
-	r0, _, e1 := syscall.SyscallN(procWintunStartSession.Addr(), wintun.handle, uintptr(capacity), 0)
-	if r0 == 0 {
-		err = e1
-	} else {
-		session = Session{r0}
+func (wintun *Adapter) StartSession(capacity uint32) (Session, error) {
+	r1, _, err := syscall.SyscallN(procWintunStartSession.Addr(), wintun.handle, uintptr(capacity), 0)
+	if r1 == 0 || !win.IsErrSuccess(err) {
+		return Session{}, err
 	}
-	return
+	return Session{r1}, nil
 }
 
 func (session *Session) End() {
@@ -54,35 +54,30 @@ func (session *Session) End() {
 	session.handle = 0
 }
 
-func (session *Session) ReadWaitEvent() (handle windows.Handle) {
-	r0, _, _ := syscall.SyscallN(procWintunGetReadWaitEvent.Addr(), session.handle, 0, 0)
-	handle = windows.Handle(r0)
-	return
+func (session *Session) ReadWaitEvent() windows.Handle {
+	r1, _, _ := syscall.SyscallN(procWintunGetReadWaitEvent.Addr(), session.handle, 0, 0)
+	return windows.Handle(r1)
 }
 
-func (session *Session) ReceivePacket() (packet []byte, err error) {
+func (session *Session) ReceivePacket() ([]byte, error) {
 	var packetSize uint32
-	r0, _, e1 := syscall.SyscallN(procWintunReceivePacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packetSize)), 0)
-	if r0 == 0 {
-		err = e1
-		return
+	r1, _, err := syscall.SyscallN(procWintunReceivePacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packetSize)), 0)
+	if r1 == 0 || !win.IsErrSuccess(err) {
+		return nil, err
 	}
-	packet = unsafe.Slice((*byte)(unsafe.Pointer(r0)), packetSize)
-	return
+	return unsafe.Slice((*byte)(unsafe.Pointer(r1)), packetSize), nil
 }
 
 func (session *Session) ReleaseReceivePacket(packet []byte) {
 	syscall.SyscallN(procWintunReleaseReceivePacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packet[0])), 0) //nolint:errcheck
 }
 
-func (session *Session) AllocateSendPacket(packetSize int) (packet []byte, err error) {
-	r0, _, e1 := syscall.SyscallN(procWintunAllocateSendPacket.Addr(), session.handle, uintptr(packetSize), 0)
-	if r0 == 0 {
-		err = e1
-		return
+func (session *Session) AllocateSendPacket(packetSize int) ([]byte, error) {
+	r1, _, err := syscall.SyscallN(procWintunAllocateSendPacket.Addr(), session.handle, uintptr(packetSize), 0)
+	if r1 == 0 || !win.IsErrSuccess(err) {
+		return nil, err
 	}
-	packet = unsafe.Slice((*byte)(unsafe.Pointer(r0)), packetSize)
-	return
+	return unsafe.Slice((*byte)(unsafe.Pointer(r1)), packetSize), nil
 }
 
 func (session *Session) SendPacket(packet []byte) {

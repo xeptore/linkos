@@ -3,11 +3,11 @@
 package kernel32
 
 import (
-	"errors"
-	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/xeptore/linkos/win"
 )
 
 var (
@@ -20,11 +20,11 @@ var (
 )
 
 func WaitForSingleObject(h windows.Handle, timeout uint32) (uint32, error) {
-	ret, _, err := procWaitForSingleObjectEx.Call(uintptr(h), uintptr(1), 0)
-	if !isErrSuccess(err) {
+	r1, _, err := procWaitForSingleObjectEx.Call(uintptr(h), uintptr(1), 0)
+	if !win.IsErrSuccess(err) {
 		return uint32(0), err
 	}
-	return uint32(ret), nil
+	return uint32(r1), nil
 }
 
 func boolToUintptr(b bool) uintptr {
@@ -34,27 +34,16 @@ func boolToUintptr(b bool) uintptr {
 	return 0
 }
 
-func isErrSuccess(err error) bool {
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
-		if errno == 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func WaitForMultipleObjects(handles []windows.Handle, waitAll bool, timeout uint32) (uint32, error) {
-	ret, _, err := procWaitForMultipleObjects.Call(uintptr(len(handles)), uintptr(unsafe.Pointer(&handles[0])), boolToUintptr(waitAll), uintptr(timeout))
-	if errors.Is(err, windows.ERROR_SUCCESS) {
-		err = nil
+	r1, _, err := procWaitForMultipleObjects.Call(uintptr(len(handles)), uintptr(unsafe.Pointer(&handles[0])), boolToUintptr(waitAll), uintptr(timeout))
+	if !win.IsErrSuccess(err) {
+		return 0, err
 	}
-	return uint32(ret), err
+	return uint32(r1), nil
 }
 
 func SetEvent(h windows.Handle) error {
-	ret, _, err := procSetEvent.Call(uintptr(h))
-	if ret == 0 {
+	if _, _, err := procSetEvent.Call(uintptr(h)); !win.IsErrSuccess(err) {
 		return err
 	}
 	return nil
@@ -66,17 +55,16 @@ func CreateEvent(manualReset bool, initialState bool, name string) (windows.Hand
 		return 0, err
 	}
 
-	ret, _, err := procCreateEventW.Call(0, boolToUintptr(manualReset), boolToUintptr(initialState), uintptr(unsafe.Pointer(namePtr)))
-	if errors.Is(err, windows.ERROR_SUCCESS) {
-		err = nil
+	r1, _, err := procCreateEventW.Call(0, boolToUintptr(manualReset), boolToUintptr(initialState), uintptr(unsafe.Pointer(namePtr)))
+	if !win.IsErrSuccess(err) {
+		return 0, err
 	}
 
-	return windows.Handle(ret), err
+	return windows.Handle(r1), nil
 }
 
 func CloseHandle(h windows.Handle) error {
-	ret, _, err := procCloseHandle.Call(uintptr(h))
-	if ret == 0 {
+	if _, _, err := procCloseHandle.Call(uintptr(h)); !win.IsErrSuccess(err) {
 		return err
 	}
 	return nil

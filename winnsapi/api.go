@@ -3,10 +3,9 @@
 package winnsapi
 
 import (
-	"errors"
-	"syscall"
-
 	"golang.org/x/sys/windows"
+
+	"github.com/xeptore/linkos/win"
 )
 
 var (
@@ -14,19 +13,9 @@ var (
 	procDNSFlushResolverCache = moddnsapi.NewProc("DnsFlushResolverCache")
 )
 
-func isErrSuccess(err error) bool {
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
-		if errno == 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func FlushResolverCache() error {
 	_, _, err := procDNSFlushResolverCache.Call(0, 0, 0, 0)
-	if !isErrSuccess(err) {
+	if !win.IsErrSuccess(err) {
 		return err
 	}
 	return nil

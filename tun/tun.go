@@ -42,11 +42,10 @@ func (err *CreateError) Error() string {
 }
 
 func New(logger zerolog.Logger, ringSize uint32, pool *pool.PacketPool) (*Tun, error) {
-	v, err := wintun.RunningVersion()
-	if nil != err {
+	if ver, err := wintun.RunningVersion(); nil != err {
 		logger.Error().Err(err).Msg("Failed to get wintun version")
 	} else {
-		logger.Debug().Uint32("version", v).Msg("Loading wintun")
+		logger.Debug().Str("version", ver).Msg("Loading wintun")
 	}
 
 	guid, err := windows.GUIDFromString(TunGUID)
