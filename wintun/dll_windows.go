@@ -37,11 +37,11 @@ func (p *lazyProc) Find() error {
 	}
 
 	err := p.dll.Load()
-	if err != nil {
+	if nil != err {
 		return fmt.Errorf("error loading DLL: %s, MODULE: %s, error: %w", p.dll.Name, p.Name, err)
 	}
 	addr, err := p.nameToAddr()
-	if err != nil {
+	if nil != err {
 		return fmt.Errorf("error getting %s address: %w", p.Name, err)
 	}
 
@@ -51,7 +51,7 @@ func (p *lazyProc) Find() error {
 
 func (p *lazyProc) Addr() uintptr {
 	err := p.Find()
-	if err != nil {
+	if nil != err {
 		panic(err)
 	}
 	return p.addr
@@ -83,7 +83,7 @@ func (d *lazyDLL) Load() error {
 	}
 
 	module, err := memmod.LoadLibrary(dllContent)
-	if err != nil {
+	if nil != err {
 		return fmt.Errorf("unable to load library: %w", err)
 	}
 	d.Base = windows.Handle(module.BaseAddr())

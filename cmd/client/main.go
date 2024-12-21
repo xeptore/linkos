@@ -365,7 +365,8 @@ func (c *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) {
 func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, packet *pool.Packet) error {
 	defer packet.ReturnToPool()
 
-	if ok, err := filterOutgoingPacket(logger, packet.Payload.Bytes()); nil != err {
+	packetBytes := packet.Payload.Bytes()
+	if ok, err := filterOutgoingPacket(logger, packetBytes); nil != err {
 		logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to filter packet")
 		return nil
 	} else if !ok {
@@ -373,7 +374,13 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, packet *pool
 		return nil
 	}
 
-	n, err := io.CopyN(conn, packet.Payload, int64(packet.Size))
+	packetBytes, err := netutil.Compress(packetBytes)
+	if nil != err {
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to compress packet")
+		return nil
+	}
+
+	n, err := conn.Write(packetBytes)
 	if nil != err {
 		switch {
 		case errors.Is(err, net.ErrClosed):
@@ -384,7 +391,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, packet *pool
 		}
 		return err
 	}
-	logger.Trace().Int64("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
+	logger.Trace().Int("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
 	return nil
 }
 

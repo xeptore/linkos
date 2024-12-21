@@ -17,6 +17,7 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/netutil"
 )
 
 type (
@@ -171,6 +172,12 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 
 	srcAddr := c.RemoteAddr().String()
 	logger := s.logger.With().Str("src_addr", srcAddr).Logger()
+
+	packet, err = netutil.Decompress(packet)
+	if nil != err {
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to decompress packet")
+		return gnet.None
+	}
 
 	if n := c.InboundBuffered(); n > 0 {
 		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packet)).Msg("More packets in buffer")

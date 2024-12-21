@@ -41,12 +41,12 @@ func closeAdapter(wintun *Adapter) {
 func CreateAdapter(name string, tunnelType string, requestedGUID *windows.GUID) (wintun *Adapter, err error) {
 	var name16 *uint16
 	name16, err = windows.UTF16PtrFromString(name)
-	if err != nil {
+	if nil != err {
 		return
 	}
 	var tunnelType16 *uint16
 	tunnelType16, err = windows.UTF16PtrFromString(tunnelType)
-	if err != nil {
+	if nil != err {
 		return
 	}
 	r0, _, e1 := syscall.SyscallN(procWintunCreateAdapter.Addr(), uintptr(unsafe.Pointer(name16)), uintptr(unsafe.Pointer(tunnelType16)), uintptr(unsafe.Pointer(requestedGUID)))
@@ -63,7 +63,7 @@ func CreateAdapter(name string, tunnelType string, requestedGUID *windows.GUID) 
 func OpenAdapter(name string) (wintun *Adapter, err error) {
 	var name16 *uint16
 	name16, err = windows.UTF16PtrFromString(name)
-	if err != nil {
+	if nil != err {
 		return
 	}
 	r0, _, e1 := syscall.SyscallN(procWintunOpenAdapter.Addr(), uintptr(unsafe.Pointer(name16)), 0, 0)

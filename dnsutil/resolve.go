@@ -69,7 +69,7 @@ func (c *Transport) DialContext(ctx context.Context, network, addr string) (net.
 	}
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", ip, 443)) // Port 443 for HTTPS
-	if err != nil {
+	if nil != err {
 		return nil, fmt.Errorf("dnsutil: failed to dial TCP connection: %v", err)
 	}
 	return conn, nil

@@ -7,6 +7,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/miekg/dns v1.1.62
 	github.com/panjf2000/gnet/v2 v2.6.3
+	github.com/pierrec/lz4/v4 v4.1.22
 	github.com/puzpuzpuz/xsync/v3 v3.4.0
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/mo v1.13.0
