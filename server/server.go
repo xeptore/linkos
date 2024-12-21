@@ -17,6 +17,7 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/packet"
 )
 
 type (
@@ -163,7 +164,7 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 }
 
 func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
-	packet, err := c.Next(-1)
+	buf, err := c.Next(-1)
 	if nil != err {
 		s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to read packet")
 		return gnet.Close
@@ -172,27 +173,21 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	srcAddr := c.RemoteAddr().String()
 	logger := s.logger.With().Str("src_addr", srcAddr).Logger()
 
-	if n := c.InboundBuffered(); n > 0 {
-		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packet)).Msg("More packets in buffer")
-	}
-
-	if l := len(packet); l < 20 {
-		s.logger.Debug().Int("bytes", l).Msg("Ignoring invalid IP packet")
-		return gnet.None
-	} else {
-		logger = logger.With().Int("bytes", l).Logger()
-	}
-
-	srcIP, dstIP, err := parseIPv4Header(packet)
+	pkt, err := packet.FromIncoming(buf)
 	if nil != err {
-		s.logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to parse packet IP header")
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to parse packet")
 		return gnet.None
 	}
-	prvIP := srcIP.String()
-	logger = logger.With().Str("src_ip", prvIP).Str("dst_ip", dstIP.String()).Logger()
+
+	if n := c.InboundBuffered(); n > 0 {
+		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(pkt.Raw)).Msg("More packets in buffer")
+	}
+
+	prvIP := pkt.Header.SrcIP.String()
+	logger = logger.With().Str("src_ip", prvIP).Str("dst_ip", pkt.Header.DstIP.String()).Logger()
 	logger.Debug().Msg("Received packet")
 
-	if !s.isInSubnet(srcIP) || !s.isInSubnet(dstIP) {
+	if !s.isInSubnet(pkt.Header.SrcIP) || !s.isInSubnet(pkt.Header.DstIP) {
 		logger.Debug().Msg("Ignoring packet outside of subnet")
 		return gnet.None
 	}
@@ -257,19 +252,19 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	}
 
 	switch {
-	case dstIP.Equal(s.gatewayIP):
+	case pkt.Header.DstIP.Equal(s.gatewayIP):
 		logger.Debug().Msg("Handling keep-alive packet")
 		client.l.Lock()
 		client.LastKeepAlive = time.Now().Unix()
 		client.l.Unlock()
 		logger.Debug().Msg("Updated client keep-alive timestamp")
-	case dstIP.Equal(s.broadcastIP):
+	case pkt.Header.DstIP.Equal(s.broadcastIP):
 		logger.Debug().Msg("Broadcasting packet")
 		s.clients.Range(func(ip string, client *Client) bool {
-			if ip != srcIP.String() {
+			if ip != prvIP {
 				logger = logger.With().Str("dst_ip", ip).Str("dst_addr", client.Addr).Logger()
 				logger.Debug().Msg("Broadcasting packet to client")
-				if _, err := client.Conn.Write(packet); nil != err {
+				if _, err := client.Conn.Write(pkt.Raw); nil != err {
 					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write packet")
 				} else {
 					logger.Debug().Msg("Broadcasted packet to client")
@@ -279,8 +274,8 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 		})
 	default:
 		logger.Debug().Msg("Forwarding packet")
-		if client, ok := s.clients.Load(dstIP.String()); ok {
-			if _, err := client.Conn.Write(packet); nil != err {
+		if client, ok := s.clients.Load(pkt.Header.DstIP.String()); ok {
+			if _, err := client.Conn.Write(pkt.Raw); nil != err {
 				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write packet")
 			} else {
 				logger.Debug().Msg("Forwarded packet to client")
@@ -289,20 +284,6 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	}
 
 	return gnet.None
-}
-
-// IPv4 header format: https://tools.ietf.org/html/rfc791
-func parseIPv4Header(packet []byte) (srcIP, destIP net.IP, err error) {
-	// IP version & IHL are in the first byte
-	// Check version == 4
-	versionIHL := packet[0]
-	if version := versionIHL >> 4; version != 4 {
-		return nil, nil, fmt.Errorf("ip: invalid packet version: %d", version)
-	}
-
-	srcIP = net.IPv4(packet[12], packet[13], packet[14], packet[15])
-	destIP = net.IPv4(packet[16], packet[17], packet[18], packet[19])
-	return srcIP, destIP, nil
 }
 
 func getBroadcastIP(subnet *net.IPNet) (net.IP, error) {
