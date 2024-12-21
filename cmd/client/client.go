@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +14,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
+
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/dnsutil"
 	"github.com/xeptore/linkos/errutil"
@@ -22,6 +22,7 @@ import (
 	"github.com/xeptore/linkos/netutil"
 	"github.com/xeptore/linkos/packet"
 	"github.com/xeptore/linkos/pool"
+	"github.com/xeptore/linkos/tun"
 )
 
 type Client struct {
@@ -249,19 +250,6 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 			logger.Trace().Msg("Sent keep-alive packet")
 		}
 	}
-}
-
-func checksumIPv4(b []byte) int {
-	sum := 0
-	for i := 0; i < len(b)-1; i += 2 {
-		sum += int(binary.BigEndian.Uint16(b[i:]))
-	}
-	if len(b)%2 != 0 {
-		sum += int(b[len(b)-1]) << 8
-	}
-	sum = (sum >> 16) + (sum & 0xffff)
-	sum += sum >> 16
-	return ^sum
 }
 
 func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
