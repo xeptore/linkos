@@ -12,13 +12,13 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/samber/mo"
 	"golang.org/x/sys/windows"
-	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/kernel32"
 	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/winnsapi"
+	"github.com/xeptore/linkos/wintun"
 )
 
 const TunGUID = "{BF663C0F-5A47-4720-A8CB-BEFD5A7A4633}"
@@ -42,7 +42,12 @@ func (err *CreateError) Error() string {
 }
 
 func New(logger zerolog.Logger, ringSize uint32, pool *pool.PacketPool) (*Tun, error) {
-	logger.Debug().Str("version", wintun.Version()).Msg("Loading wintun")
+	v, err := wintun.RunningVersion()
+	if nil != err {
+		logger.Error().Err(err).Msg("Failed to get wintun version")
+	} else {
+		logger.Debug().Uint32("version", v).Msg("Loading wintun")
+	}
 
 	guid, err := windows.GUIDFromString(TunGUID)
 	if nil != err {
