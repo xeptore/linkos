@@ -28,7 +28,6 @@ tasks:
       - cmd: |-
           go build \
             -a \
-            -buildvcs=true \
             -trimpath \
             -ldflags="-X 'main.Version={{default "dev" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
             -o ./bin/client/linkos.exe \
@@ -48,7 +47,6 @@ tasks:
       - cmd: |-
           go build \
             -a \
-            -buildvcs=true \
             -trimpath \
             -tags='poll_opt gc_opt' \
             -ldflags="-X 'main.Version={{default "dev" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
