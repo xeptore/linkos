@@ -16,7 +16,7 @@ import (
 )
 
 func (d *lazyDLL) NewProc(name string) *lazyProc {
-	return &lazyProc{dll: d, Name: name}
+	return &lazyProc{dll: d, Name: name} //nolint:exhaustruct
 }
 
 type lazyProc struct {
@@ -69,7 +69,7 @@ type lazyDLL struct {
 }
 
 func newLazyDLL(name string) *lazyDLL {
-	return &lazyDLL{Name: name}
+	return &lazyDLL{Name: name} //nolint:exhaustruct
 }
 
 func (d *lazyDLL) Load() error {

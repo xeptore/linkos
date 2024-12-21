@@ -22,7 +22,7 @@ const (
 	RingCapacityMax = 0x4000000 // Maximum ring capacity (64 MiB)
 )
 
-// Packet with data
+// Packet with data.
 type Packet struct {
 	Next *Packet              // Pointer to next packet in queue
 	Size uint32               // Size of packet (max WINTUN_MAX_IP_PACKET_SIZE)
@@ -40,7 +40,7 @@ var (
 )
 
 func (wintun *Adapter) StartSession(capacity uint32) (session Session, err error) {
-	r0, _, e1 := syscall.SyscallN(procWintunStartSession.Addr(), uintptr(wintun.handle), uintptr(capacity), 0)
+	r0, _, e1 := syscall.SyscallN(procWintunStartSession.Addr(), wintun.handle, uintptr(capacity), 0)
 	if r0 == 0 {
 		err = e1
 	} else {
@@ -49,18 +49,18 @@ func (wintun *Adapter) StartSession(capacity uint32) (session Session, err error
 	return
 }
 
-func (session Session) End() {
-	syscall.SyscallN(procWintunEndSession.Addr(), session.handle, 0, 0)
+func (session *Session) End() {
+	syscall.SyscallN(procWintunEndSession.Addr(), session.handle, 0, 0) //nolint:errcheck
 	session.handle = 0
 }
 
-func (session Session) ReadWaitEvent() (handle windows.Handle) {
+func (session *Session) ReadWaitEvent() (handle windows.Handle) {
 	r0, _, _ := syscall.SyscallN(procWintunGetReadWaitEvent.Addr(), session.handle, 0, 0)
 	handle = windows.Handle(r0)
 	return
 }
 
-func (session Session) ReceivePacket() (packet []byte, err error) {
+func (session *Session) ReceivePacket() (packet []byte, err error) {
 	var packetSize uint32
 	r0, _, e1 := syscall.SyscallN(procWintunReceivePacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packetSize)), 0)
 	if r0 == 0 {
@@ -71,11 +71,11 @@ func (session Session) ReceivePacket() (packet []byte, err error) {
 	return
 }
 
-func (session Session) ReleaseReceivePacket(packet []byte) {
-	syscall.SyscallN(procWintunReleaseReceivePacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packet[0])), 0)
+func (session *Session) ReleaseReceivePacket(packet []byte) {
+	syscall.SyscallN(procWintunReleaseReceivePacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packet[0])), 0) //nolint:errcheck
 }
 
-func (session Session) AllocateSendPacket(packetSize int) (packet []byte, err error) {
+func (session *Session) AllocateSendPacket(packetSize int) (packet []byte, err error) {
 	r0, _, e1 := syscall.SyscallN(procWintunAllocateSendPacket.Addr(), session.handle, uintptr(packetSize), 0)
 	if r0 == 0 {
 		err = e1
@@ -85,6 +85,6 @@ func (session Session) AllocateSendPacket(packetSize int) (packet []byte, err er
 	return
 }
 
-func (session Session) SendPacket(packet []byte) {
-	syscall.SyscallN(procWintunSendPacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packet[0])), 0)
+func (session *Session) SendPacket(packet []byte) {
+	syscall.SyscallN(procWintunSendPacket.Addr(), session.handle, uintptr(unsafe.Pointer(&packet[0])), 0) //nolint:errcheck
 }

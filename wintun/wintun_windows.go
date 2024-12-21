@@ -30,7 +30,7 @@ var (
 )
 
 func closeAdapter(wintun *Adapter) {
-	syscall.SyscallN(procWintunCloseAdapter.Addr(), wintun.handle, 0, 0)
+	syscall.SyscallN(procWintunCloseAdapter.Addr(), wintun.handle, 0, 0) //nolint:errcheck
 }
 
 // CreateAdapter creates a Wintun adapter. name is the cosmetic name of the adapter.
@@ -107,6 +107,6 @@ func RunningVersion() (version uint32, err error) {
 
 // LUID returns the LUID of the adapter.
 func (wintun *Adapter) LUID() (luid uint64) {
-	syscall.SyscallN(procWintunGetAdapterLUID.Addr(), uintptr(wintun.handle), uintptr(unsafe.Pointer(&luid)), 0)
+	syscall.SyscallN(procWintunGetAdapterLUID.Addr(), wintun.handle, uintptr(unsafe.Pointer(&luid)), 0) //nolint:errcheck
 	return
 }
