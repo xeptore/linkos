@@ -15,7 +15,6 @@ tasks:
       - cmd: |-
           rm -rf ./bin
           mkdir -p ./bin/{client,server}
-          cp ./wintun.dll ./bin/client/wintun.dll
           cp ./config/client.ini ./bin/client/config.ini
           cp ./config/server.ini ./bin/server/config.ini
 
