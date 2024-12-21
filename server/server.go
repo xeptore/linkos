@@ -173,24 +173,24 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	srcAddr := c.RemoteAddr().String()
 	logger := s.logger.With().Str("src_addr", srcAddr).Logger()
 
-	packet, err = netutil.Decompress(packet)
+	decompressedPacket, err := netutil.Decompress(packet)
 	if nil != err {
 		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to decompress packet")
 		return gnet.None
 	}
 
 	if n := c.InboundBuffered(); n > 0 {
-		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packet)).Msg("More packets in buffer")
+		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(decompressedPacket)).Msg("More packets in buffer")
 	}
 
-	if l := len(packet); l < 20 {
+	if l := len(decompressedPacket); l < 20 {
 		s.logger.Debug().Int("bytes", l).Msg("Ignoring invalid IP packet")
 		return gnet.None
 	} else {
 		logger = logger.With().Int("bytes", l).Logger()
 	}
 
-	srcIP, dstIP, err := parseIPv4Header(packet)
+	srcIP, dstIP, err := parseIPv4Header(decompressedPacket)
 	if nil != err {
 		s.logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to parse packet IP header")
 		return gnet.None

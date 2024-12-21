@@ -489,7 +489,13 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 		}
 		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
 
-		n, err = c.t.Write(buffer[:n])
+		packet, err := netutil.Decompress(buffer[:n])
+		if nil != err {
+			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to decompress packet")
+			return
+		}
+
+		n, err = c.t.Write(packet)
 		if nil != err {
 			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error writing to TUN device")
 			return
