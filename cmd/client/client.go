@@ -192,7 +192,8 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 
 	packetSize := int64(p.Size)
 	n, err := io.CopyN(conn, p.Payload, packetSize)
-	if nil != err {
+	switch {
+	case nil != err:
 		switch {
 		case errors.Is(err, net.ErrClosed):
 		case netutil.IsConnClosedError(err):
@@ -201,9 +202,9 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error sending data to server")
 		}
 		return err
-	} else if n != packetSize {
+	case n != packetSize:
 		logger.Error().Int64("written", n).Int64("expected", packetSize).Msg("Failed to write all bytes of packet to tunnel connection")
-	} else {
+	default:
 		logger.Trace().Int64("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
 	}
 	return nil
@@ -307,12 +308,13 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
 
 		written, err := c.t.Write(buffer[:n])
-		if nil != err {
+		switch {
+		case nil != err:
 			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error writing to TUN device")
 			return
-		} else if written != n {
+		case written != n:
 			logger.Error().Int("written", written).Int("expected", n).Msg("Failed to write all bytes to TUN device")
-		} else {
+		default:
 			logger.Trace().Int("bytes", n).Msg("Incoming packet has been written to TUN device")
 		}
 	}
