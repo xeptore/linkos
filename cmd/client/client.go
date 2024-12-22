@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
@@ -14,13 +16,13 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
+	"golang.org/x/net/ipv4"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/dnsutil"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
 	"github.com/xeptore/linkos/netutil"
-	"github.com/xeptore/linkos/packet"
 	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/tun"
 )
@@ -188,17 +190,8 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 		return nil
 	}
 
-	pa, err := packet.FromIP(payload)
-	if nil != err {
-		if errors.Is(err, errors.ErrUnsupported) {
-			logger.Debug().Msg("Ignoring unsupported outgoing packet")
-		} else {
-			logger.Error().Err(err).Msg("Failed to parse outgoing IPv4 packet")
-		}
-		return nil
-	}
-
-	n, err := pa.Write(conn)
+	packetSize := int64(p.Size)
+	n, err := io.CopyN(conn, p.Payload, packetSize)
 	if nil != err {
 		switch {
 		case errors.Is(err, net.ErrClosed):
@@ -208,8 +201,11 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error sending data to server")
 		}
 		return err
+	} else if n != packetSize {
+		logger.Error().Int64("written", n).Int64("expected", packetSize).Msg("Failed to write all bytes of packet to tunnel connection")
+	} else {
+		logger.Trace().Int64("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
 	}
-	logger.Trace().Int("bytes", n).Msg("Outgoing packet has been written to tunnel connection")
 	return nil
 }
 
@@ -224,12 +220,37 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	}
 	logger = logger.With().Str("gateway_ip", gatewayIP.String()).Logger()
 
-	pa := packet.Packet{
-		Header: packet.Header{
-			SrcIP: c.ip,
-			DstIP: gatewayIP,
-		},
-		Raw: []byte{},
+	header := &ipv4.Header{ //nolint:exhaustruct
+		Version:  ipv4.Version,
+		Len:      ipv4.HeaderLen,
+		TOS:      0,
+		TotalLen: ipv4.HeaderLen,
+		ID:       0,
+		Flags:    0,
+		FragOff:  0,
+		TTL:      64,
+		Protocol: 0,
+		Checksum: 0,
+		Src:      c.ip,
+		Dst:      gatewayIP,
+	}
+
+	// Marshal the header into a byte slice
+	packet, err := header.Marshal()
+	if nil != err {
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to marshal keep-alive packet header before checksum calculation")
+		return
+	}
+
+	// Calculate the checksum (important for network transmission)
+	header.Checksum = 0 // Reset checksum before recalculation
+	header.Checksum = checksumIPv4(packet)
+
+	// Marshal the header again with the calculated checksum
+	packetBytes, err := header.Marshal()
+	if nil != err {
+		logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to marshal keep-alive packet header after checksum calculation")
+		return
 	}
 
 	for {
@@ -239,17 +260,33 @@ func (c *Client) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 			return
 		case <-time.After(config.DefaultKeepAliveIntervalSec * time.Second):
 			logger.Trace().Msg("Sending keep-alive packet")
-			if _, err := pa.Write(conn); nil != err {
+			if written, err := conn.Write(packetBytes); nil != err {
 				if netutil.IsConnClosedError(err) {
 					logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
 				} else {
 					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write keep-alive packet to connection")
 				}
 				return
+			} else if written != len(packetBytes) {
+				logger.Error().Int("written", written).Int("expected", len(packetBytes)).Msg("Failed to write all bytes of keep-alive packet to connection")
+			} else {
+				logger.Trace().Msg("Sent keep-alive packet")
 			}
-			logger.Trace().Msg("Sent keep-alive packet")
 		}
 	}
+}
+
+func checksumIPv4(b []byte) int {
+	sum := 0
+	for i := 0; i < len(b)-1; i += 2 {
+		sum += int(binary.BigEndian.Uint16(b[i:]))
+	}
+	if len(b)%2 != 0 {
+		sum += int(b[len(b)-1]) << 8
+	}
+	sum = (sum >> 16) + (sum & 0xffff)
+	sum += sum >> 16
+	return ^sum
 }
 
 func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
@@ -269,18 +306,15 @@ func (c *Client) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 		}
 		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
 
-		raw, err := packet.Decompress(buffer[:n])
-		if nil != err {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to decompress incoming packet")
-			continue
-		}
-
-		n, err = c.t.Write(raw)
+		written, err := c.t.Write(buffer[:n])
 		if nil != err {
 			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Error writing to TUN device")
 			return
+		} else if written != n {
+			logger.Error().Int("written", written).Int("expected", n).Msg("Failed to write all bytes to TUN device")
+		} else {
+			logger.Trace().Int("bytes", n).Msg("Incoming packet has been written to TUN device")
 		}
-		logger.Trace().Int("bytes", n).Msg("Incoming packet has been written to TUN device")
 	}
 }
 
