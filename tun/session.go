@@ -14,6 +14,7 @@ import (
 
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/kernel32"
+	"github.com/xeptore/linkos/mathutil"
 	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/wintun"
 )
@@ -28,7 +29,7 @@ type Session struct {
 func (t *Tun) StartSession(p pool.Pool) (*Session, error) {
 	t.logger.Trace().Msg("Starting session")
 
-	session, err := t.adapter.StartSession(t.ringSize)
+	session, err := t.adapter.StartSession(mathutil.ToPowerOf2(t.ringSizeExp))
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to start session: %v", err)
 	}

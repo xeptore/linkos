@@ -19,10 +19,10 @@ import (
 const TunGUID = "{BF663C0F-5A47-4720-A8CB-BEFD5A7A4633}"
 
 type Tun struct {
-	adapter   *wintun.Adapter
-	stopEvent windows.Handle
-	ringSize  uint32
-	logger    zerolog.Logger
+	adapter     *wintun.Adapter
+	stopEvent   windows.Handle
+	ringSizeExp uint32
+	logger      zerolog.Logger
 }
 
 type CreateError struct {
@@ -33,7 +33,7 @@ func (err *CreateError) Error() string {
 	return err.Err.Error()
 }
 
-func New(logger zerolog.Logger, ringSize uint32) (*Tun, error) {
+func New(logger zerolog.Logger, ringSizePower uint32) (*Tun, error) {
 	if ver, err := wintun.RunningVersion(); nil != err {
 		logger.Error().Err(err).Msg("Failed to get wintun version")
 	} else {
@@ -62,10 +62,10 @@ func New(logger zerolog.Logger, ringSize uint32) (*Tun, error) {
 	}
 
 	return &Tun{
-		adapter:   adapter,
-		stopEvent: stopEvent,
-		ringSize:  ringSize,
-		logger:    logger,
+		adapter:     adapter,
+		stopEvent:   stopEvent,
+		ringSizeExp: ringSizePower,
+		logger:      logger,
 	}, nil
 }
 

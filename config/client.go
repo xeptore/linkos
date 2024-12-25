@@ -12,18 +12,15 @@ import (
 
 	"github.com/rs/zerolog"
 	"gopkg.in/ini.v1"
-
-	"github.com/xeptore/linkos/mathutil"
-	"github.com/xeptore/linkos/wintun"
 )
 
 type Client struct {
-	ServerHost string
-	IP         string
-	RingSize   uint32
-	BufferSize int
-	MTU        uint32
-	LogLevel   zerolog.Level
+	ServerHost  string
+	IP          string
+	RingSizeExp uint32
+	BufferSize  int
+	MTU         uint32
+	LogLevel    zerolog.Level
 }
 
 func (c *Client) LogDict() *zerolog.Event {
@@ -33,7 +30,7 @@ func (c *Client) LogDict() *zerolog.Event {
 		Str("ip", c.IP).
 		Int("buffer_size", c.BufferSize).
 		Uint32("mtu", c.MTU).
-		Uint32("ring_size", c.RingSize).
+		Uint32("ring_size_exp", c.RingSizeExp).
 		Str("log_level", c.LogLevel.String())
 }
 
@@ -48,12 +45,12 @@ func LoadClient(filename string) (*Client, error) {
 
 	serverHost := strings.TrimSpace(cfg.Section("").Key("server_host").String())
 
-	var ringSize uint32 = DefaultTunRingSize
-	if ringSizeStr := strings.TrimSpace(cfg.Section("").Key("ring_size").String()); len(ringSizeStr) != 0 {
-		if i, err := strconv.ParseUint(ringSizeStr, 10, 32); nil != err {
-			return nil, fmt.Errorf("config: invalid value of %q for ring_size configuration option, expected an integer", ringSizeStr)
+	var ringSizeExp uint32 = DefaultTunRingSizePower
+	if ringSizeExpStr := strings.TrimSpace(cfg.Section("").Key("ring_size_exp").String()); len(ringSizeExpStr) != 0 {
+		if i, err := strconv.ParseUint(ringSizeExpStr, 10, 32); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for ring_size_exp configuration option, expected an integer", ringSizeExpStr)
 		} else {
-			ringSize = uint32(i)
+			ringSizeExp = uint32(i)
 		}
 	}
 
@@ -80,12 +77,12 @@ func LoadClient(filename string) (*Client, error) {
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 
 	out := Client{
-		ServerHost: serverHost,
-		IP:         ip,
-		RingSize:   ringSize,
-		BufferSize: bufferSize,
-		MTU:        mtu,
-		LogLevel:   DefaultClientLogLevel,
+		ServerHost:  serverHost,
+		IP:          ip,
+		RingSizeExp: ringSizeExp,
+		BufferSize:  bufferSize,
+		MTU:         mtu,
+		LogLevel:    DefaultClientLogLevel,
 	}
 
 	if logLevel != "" {
@@ -126,20 +123,16 @@ func (c *Client) validate() error {
 		return fmt.Errorf("config: mtu is invalid: %v", err)
 	}
 
-	if err := validateRingSize(c.RingSize); nil != err {
-		return fmt.Errorf("config: ring_size is invalid: %v", err)
+	if err := validateRingSizeExp(c.RingSizeExp); nil != err {
+		return fmt.Errorf("config: ring_size_exp is invalid: %v", err)
 	}
 
 	return nil
 }
 
-func validateRingSize(n uint32) error {
-	if n < wintun.RingCapacityMin || n > wintun.RingCapacityMax {
-		return fmt.Errorf("must be in range %d - %d including", wintun.RingCapacityMin, wintun.RingCapacityMax)
-	}
-
-	if !mathutil.IsPowerOf2(n) {
-		return errors.New("must be a power of 2")
+func validateRingSizeExp(n uint32) error {
+	if n < 17 || n > 26 {
+		return fmt.Errorf("must be in range %d - %d including", 17, 26)
 	}
 
 	return nil

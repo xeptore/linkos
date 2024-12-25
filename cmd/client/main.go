@@ -155,7 +155,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 
 	logger.Trace().Msg("Initializing VPN tunnel")
-	t, err := tun.New(logger.With().Str("module", "tun").Logger(), cfg.RingSize)
+	t, err := tun.New(logger.With().Str("module", "tun").Logger(), cfg.RingSizeExp)
 	if nil != err {
 		return fmt.Errorf("tun: failed to create: %w", err)
 	}
