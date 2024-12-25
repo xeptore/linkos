@@ -36,7 +36,6 @@ type (
 	}
 	ClientPrivateIP = string
 	Client          struct {
-		Addr          string
 		Conn          gnet.Conn
 		LastKeepAlive int64
 		Disconnected  bool
@@ -167,8 +166,8 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.Close
 	}
 
-	srcAddr := c.RemoteAddr().String()
-	logger := s.logger.With().Str("src_addr", srcAddr).Logger()
+	remoteAddr := c.RemoteAddr().String()
+	logger := s.logger.With().Str("remote_addr", remoteAddr).Logger()
 
 	if n := c.InboundBuffered(); n > 0 {
 		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packet)).Msg("More packets in buffer")
@@ -198,7 +197,6 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	client, existed := s.clients.LoadOrStore(
 		prvIP,
 		&Client{
-			Addr:          srcAddr,
 			Conn:          c,
 			LastKeepAlive: time.Now().Unix(),
 			Disconnected:  false,
@@ -208,7 +206,6 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	if existed {
 		logger.Debug().Msg("Client already exists")
 		newClient := &Client{
-			Addr:          srcAddr,
 			Conn:          c,
 			LastKeepAlive: time.Now().Unix(),
 			Disconnected:  false,
@@ -219,11 +216,10 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 		isDisconnected := client.Disconnected
 		client.l.RUnlock(tk)
 
-		if isDisconnected || client.Addr != srcAddr {
+		if isDisconnected {
 			logger.
 				Debug().
 				Bool("is_disconnected", isDisconnected).
-				Str("stored_client_addr", client.Addr).
 				Msg("Replacing existing client")
 			if err := client.Conn.Close(); nil != err {
 				s.logger.Error().Err(err).Msg("Failed to close previous client connection")
@@ -265,7 +261,7 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 		logger.Debug().Msg("Broadcasting packet")
 		s.clients.Range(func(ip string, client *Client) bool {
 			if ip != prvIP {
-				logger = logger.With().Str("dst_ip", ip).Str("dst_addr", client.Addr).Logger()
+				logger = logger.With().Str("dst_ip", ip).Logger()
 				logger.Debug().Msg("Broadcasting packet to client")
 				if _, err := client.Conn.Write(packet); nil != err {
 					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
