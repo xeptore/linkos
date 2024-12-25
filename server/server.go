@@ -261,7 +261,7 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	switch {
 	case dstIP.Equal(s.gatewayIP):
 		logger.Debug().Msg("Handling keep-alive packet")
-		client[localAddr].LastKeepAlive = time.Now().Unix()
+		s.clientConns[prvIP][localAddr].LastKeepAlive = time.Now().Unix()
 		logger.Debug().Msg("Updated client keep-alive timestamp")
 	case dstIP.Equal(s.broadcastIP):
 		logger.Debug().Msg("Broadcasting packet")
