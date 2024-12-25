@@ -18,3 +18,5 @@ const (
 	DefaultMaxKernelSendBufferSize       = 2 * 1024 * 1024 // 2 MiB
 	DefaultMaxKernelRecvBufferSize       = 4 * 1024 * 1024 // 4 MiB
 )
+
+var DefaultPorts = []string{"48931", "52342", "47124", "53210", "47556", "52811", "49673", "52388"}

@@ -38,10 +38,10 @@ func ResolveAddr(ctx context.Context, logger zerolog.Logger, hostname string) (n
 		response, _, err := client.ExchangeContext(ctx, message, dnsServer)
 		if nil != err {
 			if errors.Is(err, ctx.Err()) {
-				logger.Debug().Err(err).Msg("Breaking hostname IP address resolution due to context cancellation")
+				logger.Debug().Msg("Breaking hostname IP address resolution due to context cancellation")
 				return nil, ctx.Err()
 			}
-			logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to resolve IP address using DNS server")
+			logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to resolve IP address using DNS server")
 			continue
 		}
 

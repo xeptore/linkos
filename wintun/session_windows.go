@@ -41,12 +41,13 @@ var (
 	procWintunStartSession         = modwintun.NewProc("WintunStartSession")
 )
 
-func (wintun *Adapter) StartSession(capacity uint32) (Session, error) {
-	r1, _, err := syscall.SyscallN(procWintunStartSession.Addr(), wintun.handle, uintptr(capacity), 0)
+func (wintun *Adapter) StartSession(capacity uint32) (*Session, error) {
+	r1, r2, err := syscall.SyscallN(procWintunStartSession.Addr(), wintun.handle, uintptr(capacity))
 	if r1 == 0 || !win.IsErrSuccess(err) {
-		return Session{}, err
+		return nil, err
 	}
-	return Session{r1}, nil
+	_ = r2
+	return &Session{r1}, nil
 }
 
 func (session *Session) End() {

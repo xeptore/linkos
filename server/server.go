@@ -12,6 +12,7 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
+	"github.com/samber/lo"
 	"go.uber.org/zap"
 
 	"github.com/xeptore/linkos/config"
@@ -23,7 +24,7 @@ type (
 	Server struct {
 		gnet.BuiltinEventEngine
 		engine      gnet.Engine
-		bindAddr    string
+		bindHost    string
 		bindDev     string
 		bufferSize  int
 		broadcastIP net.IP
@@ -43,7 +44,7 @@ type (
 	}
 )
 
-func New(logger zerolog.Logger, ipNet, bindAddr, bindDev string, bufferSize int) (*Server, error) {
+func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int) (*Server, error) {
 	ip, subnetIPNet, err := net.ParseCIDR(ipNet)
 	if nil != err {
 		return nil, fmt.Errorf("server: error parsing subnet CIDR: %v", err)
@@ -62,7 +63,7 @@ func New(logger zerolog.Logger, ipNet, bindAddr, bindDev string, bufferSize int)
 	server := &Server{
 		BuiltinEventEngine: gnet.BuiltinEventEngine{},
 		engine:             gnet.Engine{},
-		bindAddr:           bindAddr,
+		bindHost:           bindHost,
 		bindDev:            bindDev,
 		bufferSize:         bufferSize,
 		broadcastIP:        broadcastIP,
@@ -87,7 +88,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.logger.Debug().Msg("Stopping server engine due to parent context cancellation")
 		if err := s.engine.Stop(ctx); nil != err {
 			if !errors.Is(err, ctx.Err()) {
-				s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to stop server engine")
+				s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to stop server engine")
 			}
 		}
 		s.clients.Range(func(ip string, c *Client) bool {
@@ -114,18 +115,15 @@ func (s *Server) Run(ctx context.Context) error {
 		gnet.WithSocketSendBuffer(config.DefaultMaxKernelSendBufferSize),
 		gnet.WithLogger(logging.Logger(zap.NewNop().Sugar())),
 	}
-	if err := gnet.Run(s, "udp4://"+s.bindAddr, opts...); nil != err {
+
+	protoAddrs := lo.Map(config.DefaultPorts, func(port string, _ int) string { return "udp4://" + net.JoinHostPort(s.bindHost, port) })
+	s.logger.Debug().Strs("proto_addrs", protoAddrs).Msg("Starting engine")
+	if err := gnet.Rotate(s, protoAddrs, opts...); nil != err {
 		if errors.Is(err, ctx.Err()) {
-			s.logger.Debug().Msg("Server engine stopped due to context error. Waiting for server engine stopper goroutine to return")
-			wg.Wait()
-			s.logger.Debug().Msg("Server engine stopper goroutine returned")
+			s.logger.Debug().Msg("Server engine stopped due to context error")
 			return err
 		}
-		s.logger.Debug().Err(err).Msg("Server engine stopped due to unknown error. Waiting for server engine stopper goroutine to return")
-		cancel()
-		wg.Wait()
-		s.logger.Debug().Msg("Server engine stopper goroutine returned")
-		return fmt.Errorf("server: failed to run server: %w", err)
+		s.logger.Error().Err(err).Msg("Server engine stopped due to unknown error")
 	}
 
 	cancel()
@@ -165,7 +163,7 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	packet, err := c.Next(-1)
 	if nil != err {
-		s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to read packet")
+		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to read packet")
 		return gnet.Close
 	}
 
@@ -185,7 +183,7 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 
 	srcIP, dstIP, err := parseIPv4Header(packet)
 	if nil != err {
-		s.logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to parse packet IP header")
+		s.logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to parse packet IP header")
 		return gnet.None
 	}
 	prvIP := srcIP.String()
@@ -232,12 +230,12 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 			}
 			s.clients.Store(prvIP, newClient)
 			if err := c.SetReadBuffer(s.bufferSize); nil != err {
-				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set read buffer")
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
 			} else {
 				logger.Debug().Msg("Set connection read buffer size")
 			}
 			if err := c.SetWriteBuffer(s.bufferSize); nil != err {
-				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set write buffer")
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set write buffer")
 			} else {
 				logger.Debug().Msg("Set connection write buffer size")
 			}
@@ -245,12 +243,12 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	} else {
 		logger.Debug().Msg("New client added")
 		if err := c.SetReadBuffer(s.bufferSize); nil != err {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set read buffer")
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
 		} else {
 			logger.Debug().Msg("Set connection read buffer size")
 		}
 		if err := c.SetWriteBuffer(s.bufferSize); nil != err {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set write buffer")
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set write buffer")
 		} else {
 			logger.Debug().Msg("Set connection write buffer size")
 		}
@@ -270,7 +268,7 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 				logger = logger.With().Str("dst_ip", ip).Str("dst_addr", client.Addr).Logger()
 				logger.Debug().Msg("Broadcasting packet to client")
 				if _, err := client.Conn.Write(packet); nil != err {
-					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write packet")
+					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
 				} else {
 					logger.Debug().Msg("Broadcasted packet to client")
 				}
@@ -281,7 +279,7 @@ func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 		logger.Debug().Msg("Forwarding packet")
 		if client, ok := s.clients.Load(dstIP.String()); ok {
 			if _, err := client.Conn.Write(packet); nil != err {
-				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write packet")
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
 			} else {
 				logger.Debug().Msg("Forwarded packet to client")
 			}

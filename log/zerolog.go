@@ -22,4 +22,4 @@ func New() (zerolog.Logger, error) {
 	return logger, nil
 }
 
-const NoLevel = zerolog.InfoLevel
+const Levelless = zerolog.InfoLevel
