@@ -53,11 +53,11 @@ func main() {
 		}
 	}()
 
-	logger.WithLevel(log.NoLevel).Msg("Starting server")
+	logger.WithLevel(log.Levelless).Msg("Starting server")
 
 	if err := run(ctx, logger); nil != err {
 		if !errors.Is(err, ctx.Err()) {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to run server")
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to run server")
 		}
 	}
 
@@ -75,7 +75,7 @@ func run(ctx context.Context, logger zerolog.Logger) error {
 	logger = logger.Level(cfg.LogLevel)
 	logger.Debug().Dict("config", cfg.LogDict()).Msg("Loaded configuration")
 
-	srv, err := server.New(logger, cfg.IPNet, cfg.BindAddr, cfg.BindDev, cfg.BufferSize)
+	srv, err := server.New(logger, cfg.IPNet, cfg.BindHost, cfg.BindDev, cfg.BufferSize)
 	if nil != err {
 		return fmt.Errorf("server: failed to create server: %v", err)
 	}

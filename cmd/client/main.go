@@ -25,7 +25,6 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/log"
-	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/tun"
 	"github.com/xeptore/linkos/update"
 )
@@ -96,7 +95,7 @@ func main() {
 			logger.
 				Error().
 				Err(err).
-				Dict("err_tree", errutil.Tree(err).LogDict()).
+				Func(errutil.TreeLog(err)).
 				Func(func(e *zerolog.Event) {
 					if logger.GetLevel() < zerolog.InfoLevel {
 						e.Str("combined_output", string(openURLErr.CommandOut))
@@ -140,7 +139,7 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	if Version != "dev" {
 		logger.Trace().Str("current_version", Version).Msg("Checking for new releases")
 		if exists, latestTag, err := update.NewerVersionExists(ctx, logger, Version); nil != err {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to check for newer version existence. Make sure you have internet access and rerun the application.")
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to check for newer version existence. Make sure you have internet access and rerun the application.")
 			return nil
 		} else if exists {
 			logger.Error().Msg("Newer version exists. Download URL will be opened soon")
@@ -155,14 +154,19 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 		logger.Info().Msg("Already running the latest version")
 	}
 
-	packetPool := pool.New(cfg.BufferSize)
-
 	logger.Trace().Msg("Initializing VPN tunnel")
-	t, err := tun.New(logger.With().Str("module", "tun").Logger(), cfg.RingSize, packetPool)
+	t, err := tun.New(logger.With().Str("module", "tun").Logger(), cfg.RingSize)
 	if nil != err {
 		return fmt.Errorf("tun: failed to create: %w", err)
 	}
 	logger.Info().Msg("VPN tunnel initialized")
+	defer func() {
+		logger.Trace().Msg("Shutting down VPN tunnel")
+		if downErr := t.Down(); nil != downErr {
+			err = fmt.Errorf("tun: failed to properly shutdown: %v", downErr)
+		}
+		logger.Trace().Msg("VPN tunnel successfully shutdown")
+	}()
 
 	logger.Trace().Msg("Assigning IP address to tunnel adapter")
 	if err := t.AssignIPv4(cfg.IP); nil != err {
@@ -176,30 +180,14 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	}
 	logger.Debug().Msg("Set adapter IPv4 options")
 
-	logger.Trace().Msg("Bringing up VPN tunnel")
-	packets, err := t.Up(ctx)
-	if nil != err {
-		return fmt.Errorf("tun: failed to bring up interface: %v", err)
-	}
-	defer func() {
-		logger.Trace().Msg("Shutting down VPN tunnel")
-		if downErr := t.Down(); nil != downErr {
-			err = fmt.Errorf("tun: failed to properly shutdown: %v", downErr)
-		}
-		logger.Trace().Msg("VPN tunnel successfully shutdown")
-	}()
-	logger.Info().Msg("VPN tunnel is up")
-
 	client := Client{
-		t:               t,
-		packets:         packets,
-		serverAddr:      cfg.ServerAddr,
-		ip:              net.ParseIP(cfg.IP),
-		incomingThreads: cfg.IncomingThreads,
-		bufferSize:      cfg.BufferSize,
-		logger:          logger.With().Str("module", "client").Logger(),
+		t:          t,
+		serverHost: cfg.ServerHost,
+		ip:         net.ParseIP(cfg.IP),
+		bufferSize: cfg.BufferSize,
+		logger:     logger.With().Str("module", "client").Logger(),
 	}
 
-	logger.WithLevel(log.NoLevel).Msg("Starting VPN client")
-	return client.runLoop(ctx)
+	logger.WithLevel(log.Levelless).Msg("Starting VPN client")
+	return client.run(ctx)
 }
