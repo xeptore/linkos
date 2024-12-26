@@ -29,7 +29,7 @@ type Session struct {
 func (t *Tun) StartSession(p pool.Pool) (*Session, error) {
 	t.logger.Trace().Msg("Starting session")
 
-	session, err := t.adapter.StartSession(mathutil.ToPowerOf2(t.ringSizeExp))
+	session, err := t.adapter.StartSession(mathutil.ToPowerOf2(t.ringSize + 16))
 	if nil != err {
 		return nil, fmt.Errorf("tun: failed to start session: %v", err)
 	}

@@ -7,7 +7,7 @@ import (
 const (
 	DefaultServerLogLevel           = zerolog.InfoLevel
 	DefaultClientLogLevel           = zerolog.InfoLevel
-	DefaultTunRingSizePower         = 17
+	DefaultTunRingSize              = 1
 	DefaultClientTunDeviceMTU       = 1280
 	DefaultBufferSize               = 1280
 	DefaultServerMaxClients         = 10
