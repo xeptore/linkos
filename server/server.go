@@ -21,12 +21,14 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/pool"
 )
 
 type (
 	Server struct {
 		gnet.BuiltinEventEngine
 		engine      gnet.Engine
+		pool        pool.Pool
 		bindHost    string
 		bindDev     string
 		bufferSize  int
@@ -81,6 +83,7 @@ func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int)
 	server := &Server{
 		BuiltinEventEngine: gnet.BuiltinEventEngine{},
 		engine:             gnet.Engine{},
+		pool:               pool.New(bufferSize),
 		bindHost:           bindHost,
 		bindDev:            bindDev,
 		bufferSize:         bufferSize,
@@ -184,11 +187,16 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 }
 
 func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
-	packet, err := conn.Next(-1)
+	p := s.pool.AcquirePacket()
+	defer p.ReturnToPool()
+
+	packetBytes := p.Payload.Bytes()
+	n, err := conn.Read(packetBytes)
 	if nil != err {
 		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to read packet")
 		return gnet.Close
 	}
+	packet := packetBytes[:n]
 
 	localAddr := conn.LocalAddr().String()
 	localAddrPort, err := netip.ParseAddrPort(localAddr)
