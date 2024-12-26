@@ -39,28 +39,34 @@ func (w *Recv) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	var connectFailedAttempts int
 	for {
-		conn, err := w.connect(ctx)
-		if nil != err {
-			if errors.Is(err, ctx.Err()) {
-				w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
-				return
+		select {
+		case <-ctx.Done():
+			w.logger.Debug().Msg("Finishing client loop as parent context was cancelled")
+			return
+		default:
+			conn, err := w.connect(ctx)
+			if nil != err {
+				if errors.Is(err, ctx.Err()) {
+					w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
+					return
+				}
+				connectFailedAttempts++
+				retryDelaySec := 2 * connectFailedAttempts
+				w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
+				time.Sleep(time.Duration(retryDelaySec) * time.Second)
+				continue
+			} else {
+				w.logger.Info().Msg("Connected to server")
+				connectFailedAttempts = 0
 			}
-			connectFailedAttempts++
-			retryDelaySec := 2 * connectFailedAttempts
-			w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
-			time.Sleep(time.Duration(retryDelaySec) * time.Second)
-			continue
-		} else {
-			w.logger.Info().Msg("Connected to server")
-			connectFailedAttempts = 0
-		}
 
-		if err := w.run(ctx, conn); nil != err {
-			// Pipe is broken due to issues with conn or context cancellation
-			if errors.Is(err, ctx.Err()) {
-				return
+			if err := w.run(ctx, conn); nil != err {
+				// Pipe is broken due to issues with conn or context cancellation
+				if err := ctx.Err(); nil != err {
+					return
+				}
+				continue
 			}
-			continue
 		}
 	}
 }
@@ -100,7 +106,7 @@ func (w *Recv) handleInbound(conn *net.UDPConn) error {
 		buffer = make([]byte, w.readBufferSize)
 	)
 	for {
-		n, _, err := conn.ReadFromUDP(buffer)
+		n, err := conn.Read(buffer)
 		if nil != err {
 			if errors.Is(err, net.ErrClosed) {
 				logger.Trace().Msg("Ending server tunnel worker due to connection closure")
