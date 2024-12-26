@@ -153,8 +153,8 @@ func (w *Send) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 	for {
 		n, err := conn.Read([]byte{})
 		if nil != err {
-			if !errors.Is(err, io.EOF) {
-				logger.Error().Err(err).Msg("Failed to discard incoming packet")
+			if !errors.Is(err, net.ErrClosed) {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to discard incoming packet")
 			}
 			return
 		} else {
