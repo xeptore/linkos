@@ -11,7 +11,7 @@ const (
 	DefaultClientTunDeviceMTU            = 1280
 	DefaultBufferSize                    = 1280
 	DefaultServerInitialAllocatedClients = 10
-	DefaultServerCleanupIntervalSec      = 10 * 60
+	DefaultServerCleanupIntervalSec      = 5 * 60
 	DefaultKeepAliveIntervalSec          = 25
 	DefaultMissedKeepAliveThreshold      = 5
 	DefaultMaxKernelSendBufferSize       = 2 * 1024 * 1024 // 2 MiB
