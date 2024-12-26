@@ -47,7 +47,7 @@ func main() {
 		case <-ctx.Done():
 			logger.Trace().Msg("Context canceled before receiving a close signal")
 		case <-c:
-			logger.Info().Msg("Close signal received. Exiting...")
+			logger.Warn().Msg("Close signal received. Exiting...")
 			signal.Stop(c)
 			cancel()
 		}
