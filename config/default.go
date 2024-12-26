@@ -13,7 +13,7 @@ const (
 	DefaultBufferSize                    = 1280
 	DefaultServerInitialAllocatedClients = 10
 	DefaultServerCleanupIntervalSec      = 10 * 60
-	DefaultKeepAliveIntervalSec          = 10
+	DefaultKeepAliveIntervalSec          = 25
 	DefaultMissedKeepAliveThreshold      = 5
 	DefaultMaxKernelSendBufferSize       = 2 * 1024 * 1024 // 2 MiB
 	DefaultMaxKernelRecvBufferSize       = 4 * 1024 * 1024 // 4 MiB
