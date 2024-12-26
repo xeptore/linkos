@@ -245,12 +245,12 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 					continue
 				}
 				logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-				for dstLocalPort, dstConn := range dstClient {
+				for dstLocalPortIdx, dstConn := range dstClient {
 					if dstConn.IsIdle {
-						logger.Debug().Int("dst_local_port", dstLocalPort).Msg("Skipping idle client connection")
+						logger.Debug().Int("dst_local_port", dstLocalPortIdx).Msg("Skipping idle client connection")
 						continue
 					}
-					logger = logger.With().Int("dst_local_port", dstLocalPort).Logger()
+					logger = logger.With().Int("dst_local_port", dstLocalPortIdx).Logger()
 					logger.Debug().Msg("Forwarding broadcast packet to client")
 					if written, err := dstConn.Conn.Write(packet); nil != err {
 						logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
@@ -270,13 +270,14 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				logger.Debug().Int("dst_client_idx", dstClientIdx).Msg("Ignoring packet with out of range destination client index")
 				return gnet.None
 			}
+			logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
 			dstClient := s.clients[dstClientIdx]
-			for dstLocalPort, dstConn := range dstClient {
+			for dstLocalPortIdx, dstConn := range dstClient {
 				if dstConn.IsIdle {
-					logger.Debug().Int("dst_local_port", dstLocalPort).Msg("Skipping idle client connection")
+					logger.Debug().Int("dst_local_port_idx", dstLocalPortIdx).Msg("Skipping idle client connection")
 					continue
 				}
-				logger = logger.With().Int("dst_local_port", dstLocalPort).Logger()
+				logger = logger.With().Int("dst_local_port_idx", dstLocalPortIdx).Logger()
 				logger.Debug().Msg("Forwarding packet to client")
 				if written, err := dstConn.Conn.Write(packet); nil != err {
 					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
