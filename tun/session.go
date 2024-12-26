@@ -80,7 +80,7 @@ func (s *Session) Write(p []byte) (int, error) {
 	return len(buffer), nil
 }
 
-type Reader struct {
+type SessionReader struct {
 	err     error
 	cancel  context.CancelFunc
 	wg      *sync.WaitGroup
@@ -88,13 +88,13 @@ type Reader struct {
 	Packets <-chan *pool.Packet
 }
 
-func (r *Reader) Close() error {
+func (r *SessionReader) Close() error {
 	r.cancel()
 	r.wg.Wait()
 	return r.err
 }
 
-func (s *Session) Reader(ctx context.Context) *Reader {
+func (s *Session) Reader(ctx context.Context) *SessionReader {
 	var (
 		readEvent = s.s.ReadWaitEvent()
 		packets   = make(chan *pool.Packet, 100)
@@ -102,7 +102,7 @@ func (s *Session) Reader(ctx context.Context) *Reader {
 	)
 	ctx, cancel := context.WithCancel(ctx)
 
-	out := &Reader{
+	out := &SessionReader{
 		err:     nil,
 		cancel:  cancel,
 		wg:      &wg,

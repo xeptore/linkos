@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/xeptore/linkos/client/worker"
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/tun"
 )
@@ -34,6 +36,16 @@ func (c *Client) run(ctx context.Context) error {
 	if nil != err {
 		return fmt.Errorf("client: failed to start session: %v", err)
 	}
+
+	reader := session.Reader(ctx)
+	defer func() {
+		if err := reader.Close(); nil != err {
+			if errors.Is(err, ctx.Err()) {
+				return
+			}
+			c.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to close session packet reader")
+		}
+	}()
 
 	wg.Add(1)
 	go func() {
@@ -67,7 +79,7 @@ func (c *Client) run(ctx context.Context) error {
 			c.ip,
 			c.serverHost,
 			port,
-			session,
+			reader.Packets,
 		)
 		wg.Add(1)
 		go w.Run(ctx, &wg)

@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"strconv"
@@ -24,169 +23,15 @@ import (
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
 	"github.com/xeptore/linkos/netutil"
-	"github.com/xeptore/linkos/pool"
-	"github.com/xeptore/linkos/tun"
 )
 
 type common struct {
-	session         *tun.Session
 	serverHost      string
 	serverPort      uint16
 	writeBufferSize int
 	readBufferSize  int
 	srcIP           net.IP
 	logger          zerolog.Logger
-}
-
-type Send struct{ common }
-
-type Recv struct{ common }
-
-func NewSend(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost string, serverPort uint16, session *tun.Session) *Send {
-	return &Send{
-		common: common{
-			session:         session,
-			serverHost:      serverHost,
-			serverPort:      serverPort,
-			writeBufferSize: bufferSize,
-			readBufferSize:  0, // Nothing is expected to be received on this socket
-			srcIP:           srcIP,
-			logger:          logger,
-		},
-	}
-}
-
-func NewRecv(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost string, serverPort uint16, session *tun.Session) *Recv {
-	return &Recv{
-		common: common{
-			session:         session,
-			serverHost:      serverHost,
-			serverPort:      serverPort,
-			writeBufferSize: 128, // For the keep-alive packet
-			readBufferSize:  bufferSize,
-			srcIP:           srcIP,
-			logger:          logger,
-		},
-	}
-}
-
-func (w *Send) Run(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	reader := w.session.Reader(ctx)
-	defer func() {
-		if err := reader.Close(); nil != err {
-			if errors.Is(err, ctx.Err()) {
-				return
-			}
-			w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to close session packet reader")
-		}
-	}()
-
-	var connectFailedAttempts int
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			conn, err := w.connect(ctx)
-			if nil != err {
-				if errors.Is(err, ctx.Err()) {
-					w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
-					return
-				}
-				connectFailedAttempts++
-				retryDelaySec := 2 * connectFailedAttempts
-				w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
-				time.Sleep(time.Duration(retryDelaySec) * time.Second)
-				continue
-			} else {
-				w.logger.Info().Msg("Connected to server")
-				connectFailedAttempts = 0
-			}
-
-			if err := w.run(ctx, conn, reader); nil != err {
-				// Pipe is broken due to issues with conn or context cancellation
-				if errors.Is(err, ctx.Err()) {
-					return
-				}
-				continue
-			}
-		}
-	}
-}
-
-func (w *Send) run(ctx context.Context, conn *net.UDPConn, reader *tun.Reader) error {
-	var wg sync.WaitGroup
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		cancel()
-		wg.Wait()
-	}()
-
-	wg.Add(1)
-	go func() { // Close connection on context cancellation
-		defer wg.Done()
-		<-ctx.Done()
-		w.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
-		if err := conn.Close(); nil != err {
-			if !errors.Is(err, net.ErrClosed) {
-				w.logger.Error().Err(err).Msg("Failed to close tunnel connection triggered by parent context closure")
-			}
-		} else {
-			w.logger.Trace().Msg("Closed tunnel connection due to parent context closure")
-		}
-	}()
-
-	wg.Add(1)
-	go w.keepAlive(ctx, &wg, conn)
-
-	wg.Add(1)
-	go w.handleInbound(&wg, conn)
-
-	return w.handleOutbound(conn, reader.Packets)
-}
-
-func (w *Send) handleOutbound(conn *net.UDPConn, packets <-chan *pool.Packet) error {
-	for packet := range packets {
-		if err := sendAndReleasePacket(w.logger, conn, packet); nil != err {
-			return err
-		}
-	}
-	return nil
-}
-
-func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Packet) error {
-	defer p.ReturnToPool()
-
-	payload := p.Payload.Bytes()
-	if ok, err := filterOutgoingPacket(logger, payload); nil != err {
-		logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to filter packet")
-		return nil
-	} else if !ok {
-		logger.Trace().Msg("Dropping filtered packet")
-		return nil
-	}
-
-	packetSize := int64(p.Size)
-	written, err := io.CopyN(conn, p.Payload, packetSize)
-	switch {
-	case nil != err:
-		switch {
-		case errors.Is(err, net.ErrClosed):
-		case netutil.IsConnInterruptedError(err):
-			logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
-		default:
-			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error sending data to server")
-		}
-		return err
-	case written != packetSize:
-		logger.Error().Int64("written", written).Int64("expected", packetSize).Msg("Failed to write all bytes of packet to tunnel connection")
-	default:
-		logger.Trace().Int64("bytes", written).Msg("Outgoing packet has been written to tunnel connection")
-	}
-	return nil
 }
 
 func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
@@ -267,117 +112,6 @@ func checksumIPv4(b []byte) int {
 	sum = (sum >> 16) + (sum & 0xffff)
 	sum += sum >> 16
 	return ^sum
-}
-
-func (w *Send) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
-	defer wg.Done()
-
-	logger := w.logger.With().Str("worker", "incoming").Logger()
-	for {
-		if n, err := io.Copy(io.Discard, conn); nil != err {
-			if !errors.Is(err, io.EOF) {
-				logger.Error().Err(err).Msg("Failed to discard incoming packet")
-			}
-		} else {
-			logger.Trace().Int64("bytes", n).Msg("Incoming packet has been discarded")
-		}
-		continue
-	}
-}
-
-func (w *Recv) Run(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	var connectFailedAttempts int
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			conn, err := w.connect(ctx)
-			if nil != err {
-				if errors.Is(err, ctx.Err()) {
-					w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
-					return
-				}
-				connectFailedAttempts++
-				retryDelaySec := 2 * connectFailedAttempts
-				w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
-				time.Sleep(time.Duration(retryDelaySec) * time.Second)
-				continue
-			} else {
-				w.logger.Info().Msg("Connected to server")
-				connectFailedAttempts = 0
-			}
-
-			if err := w.run(ctx, conn); nil != err {
-				// Pipe is broken due to issues with conn or context cancellation
-				if errors.Is(err, ctx.Err()) {
-					return
-				}
-				continue
-			}
-		}
-	}
-}
-
-func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
-	var wg sync.WaitGroup
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		cancel()
-		wg.Wait()
-	}()
-
-	wg.Add(1)
-	go func() { // Close connection on context cancellation
-		defer wg.Done()
-		<-ctx.Done()
-		w.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
-		if err := conn.Close(); nil != err {
-			if !errors.Is(err, net.ErrClosed) {
-				w.logger.Error().Err(err).Msg("Failed to close tunnel connection triggered by parent context closure")
-			}
-		} else {
-			w.logger.Trace().Msg("Closed tunnel connection due to parent context closure")
-		}
-	}()
-
-	wg.Add(1)
-	go w.keepAlive(ctx, &wg, conn)
-
-	return w.handleInbound(conn)
-}
-
-func (w *Recv) handleInbound(conn *net.UDPConn) error {
-	var (
-		logger = w.logger.With().Str("worker", "incoming").Logger()
-		buffer = make([]byte, w.readBufferSize)
-	)
-	for {
-		n, _, err := conn.ReadFromUDP(buffer)
-		if nil != err {
-			if errors.Is(err, net.ErrClosed) {
-				logger.Trace().Msg("Ending server tunnel worker due to connection closure")
-			} else {
-				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error receiving data from server tunnel")
-			}
-			return err
-		}
-		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
-
-		written, err := w.session.Write(buffer[:n])
-		switch {
-		case nil != err:
-			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error writing to TUN device")
-			return err
-		case written != n:
-			logger.Error().Int("written", written).Int("expected", n).Msg("Failed to write all bytes to TUN device")
-		default:
-			logger.Trace().Int("bytes", n).Msg("Incoming packet has been written to TUN device")
-		}
-	}
 }
 
 func determineVersion(packet []byte) (int, error) {
