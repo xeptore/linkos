@@ -47,8 +47,28 @@ func (c *Client) run(ctx context.Context) error {
 		}
 	}()
 
-	for idx, port := range config.DefaultPorts {
-		w := worker.New(c.logger.With().Int("worker_id", idx).Logger(), c.bufferSize, c.ip, c.serverHost, port, session)
+	for idx, port := range config.DefaultClientRecvPorts {
+		w := worker.NewRecv(
+			c.logger.With().Str("kind", "recv").Int("worker_id", idx).Logger(),
+			c.bufferSize,
+			c.ip,
+			c.serverHost,
+			port,
+			session,
+		)
+		wg.Add(1)
+		go w.Run(ctx, &wg)
+	}
+
+	for idx, port := range config.DefaultClientSendPorts {
+		w := worker.NewSend(
+			c.logger.With().Str("kind", "send").Int("worker_id", idx).Logger(),
+			c.bufferSize,
+			c.ip,
+			c.serverHost,
+			port,
+			session,
+		)
 		wg.Add(1)
 		go w.Run(ctx, &wg)
 	}

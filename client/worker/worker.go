@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -27,27 +28,49 @@ import (
 	"github.com/xeptore/linkos/tun"
 )
 
-type Worker struct {
-	session    *tun.Session
-	serverHost string
-	serverPort string
-	bufferSize int
-	srcIP      net.IP
-	logger     zerolog.Logger
+type common struct {
+	session         *tun.Session
+	serverHost      string
+	serverPort      uint16
+	writeBufferSize int
+	readBufferSize  int
+	srcIP           net.IP
+	logger          zerolog.Logger
 }
 
-func New(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost, serverPort string, session *tun.Session) *Worker {
-	return &Worker{
-		session:    session,
-		serverHost: serverHost,
-		serverPort: serverPort,
-		bufferSize: bufferSize,
-		srcIP:      srcIP,
-		logger:     logger,
+type Send struct{ common }
+
+type Recv struct{ common }
+
+func NewSend(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost string, serverPort uint16, session *tun.Session) *Send {
+	return &Send{
+		common: common{
+			session:         session,
+			serverHost:      serverHost,
+			serverPort:      serverPort,
+			writeBufferSize: bufferSize,
+			readBufferSize:  0, // Nothing is expected to be received on this socket
+			srcIP:           srcIP,
+			logger:          logger,
+		},
 	}
 }
 
-func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup) {
+func NewRecv(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost string, serverPort uint16, session *tun.Session) *Recv {
+	return &Recv{
+		common: common{
+			session:         session,
+			serverHost:      serverHost,
+			serverPort:      serverPort,
+			writeBufferSize: 128, // For the keep-alive packet
+			readBufferSize:  bufferSize,
+			srcIP:           srcIP,
+			logger:          logger,
+		},
+	}
+}
+
+func (w *Send) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	reader := w.session.Reader(ctx)
@@ -62,33 +85,38 @@ func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	var connectFailedAttempts int
 	for {
-		conn, err := w.connect(ctx)
-		if nil != err {
-			if errors.Is(err, ctx.Err()) {
-				w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
-				return
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			conn, err := w.connect(ctx)
+			if nil != err {
+				if errors.Is(err, ctx.Err()) {
+					w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
+					return
+				}
+				connectFailedAttempts++
+				retryDelaySec := 2 * connectFailedAttempts
+				w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
+				time.Sleep(time.Duration(retryDelaySec) * time.Second)
+				continue
+			} else {
+				w.logger.Info().Msg("Connected to server")
+				connectFailedAttempts = 0
 			}
-			connectFailedAttempts++
-			retryDelaySec := 2 * connectFailedAttempts
-			w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
-			time.Sleep(time.Duration(retryDelaySec) * time.Second)
-			continue
-		} else {
-			w.logger.Info().Msg("Connected to server")
-			connectFailedAttempts = 0
-		}
 
-		if err := w.pipe(ctx, conn, reader.Packets); nil != err {
-			// Pipe is broken due to issues with conn or context cancellation
-			if errors.Is(err, ctx.Err()) {
-				return
+			if err := w.run(ctx, conn, reader); nil != err {
+				// Pipe is broken due to issues with conn or context cancellation
+				if errors.Is(err, ctx.Err()) {
+					return
+				}
+				continue
 			}
-			continue
 		}
 	}
 }
 
-func (w *Worker) pipe(ctx context.Context, conn *net.UDPConn, packets <-chan *pool.Packet) error {
+func (w *Send) run(ctx context.Context, conn *net.UDPConn, reader *tun.Reader) error {
 	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -117,10 +145,10 @@ func (w *Worker) pipe(ctx context.Context, conn *net.UDPConn, packets <-chan *po
 	wg.Add(1)
 	go w.handleInbound(&wg, conn)
 
-	return w.handleOutbound(conn, packets)
+	return w.handleOutbound(conn, reader.Packets)
 }
 
-func (w *Worker) handleOutbound(conn *net.UDPConn, packets <-chan *pool.Packet) error {
+func (w *Send) handleOutbound(conn *net.UDPConn, packets <-chan *pool.Packet) error {
 	for packet := range packets {
 		if err := sendAndReleasePacket(w.logger, conn, packet); nil != err {
 			return err
@@ -161,7 +189,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 	return nil
 }
 
-func (w *Worker) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
+func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
 	defer wg.Done()
 	logger := w.logger.With().Str("worker", "keep_alive").Logger()
 
@@ -241,12 +269,91 @@ func checksumIPv4(b []byte) int {
 	return ^sum
 }
 
-func (w *Worker) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
+func (w *Send) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 	defer wg.Done()
 
+	logger := w.logger.With().Str("worker", "incoming").Logger()
+	for {
+		if n, err := io.Copy(io.Discard, conn); nil != err {
+			if !errors.Is(err, io.EOF) {
+				logger.Error().Err(err).Msg("Failed to discard incoming packet")
+			}
+		} else {
+			logger.Trace().Int64("bytes", n).Msg("Incoming packet has been discarded")
+		}
+		continue
+	}
+}
+
+func (w *Recv) Run(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	var connectFailedAttempts int
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			conn, err := w.connect(ctx)
+			if nil != err {
+				if errors.Is(err, ctx.Err()) {
+					w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
+					return
+				}
+				connectFailedAttempts++
+				retryDelaySec := 2 * connectFailedAttempts
+				w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
+				time.Sleep(time.Duration(retryDelaySec) * time.Second)
+				continue
+			} else {
+				w.logger.Info().Msg("Connected to server")
+				connectFailedAttempts = 0
+			}
+
+			if err := w.run(ctx, conn); nil != err {
+				// Pipe is broken due to issues with conn or context cancellation
+				if errors.Is(err, ctx.Err()) {
+					return
+				}
+				continue
+			}
+		}
+	}
+}
+
+func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
+	var wg sync.WaitGroup
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	wg.Add(1)
+	go func() { // Close connection on context cancellation
+		defer wg.Done()
+		<-ctx.Done()
+		w.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
+		if err := conn.Close(); nil != err {
+			if !errors.Is(err, net.ErrClosed) {
+				w.logger.Error().Err(err).Msg("Failed to close tunnel connection triggered by parent context closure")
+			}
+		} else {
+			w.logger.Trace().Msg("Closed tunnel connection due to parent context closure")
+		}
+	}()
+
+	wg.Add(1)
+	go w.keepAlive(ctx, &wg, conn)
+
+	return w.handleInbound(conn)
+}
+
+func (w *Recv) handleInbound(conn *net.UDPConn) error {
 	var (
 		logger = w.logger.With().Str("worker", "incoming").Logger()
-		buffer = make([]byte, w.bufferSize)
+		buffer = make([]byte, w.readBufferSize)
 	)
 	for {
 		n, _, err := conn.ReadFromUDP(buffer)
@@ -256,7 +363,7 @@ func (w *Worker) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 			} else {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error receiving data from server tunnel")
 			}
-			return
+			return err
 		}
 		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
 
@@ -264,7 +371,7 @@ func (w *Worker) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 		switch {
 		case nil != err:
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error writing to TUN device")
-			return
+			return err
 		case written != n:
 			logger.Error().Int("written", written).Int("expected", n).Msg("Failed to write all bytes to TUN device")
 		default:
@@ -330,7 +437,7 @@ func filterOutgoingPacket(logger zerolog.Logger, p []byte) (bool, error) {
 	return false, nil
 }
 
-func (w *Worker) connect(ctx context.Context) (*net.UDPConn, error) {
+func (w *common) connect(ctx context.Context) (*net.UDPConn, error) {
 	w.logger.Trace().Str("server_host", w.serverHost).Msg("Resolving server address")
 
 	var serverIP net.IP
@@ -354,7 +461,7 @@ func (w *Worker) connect(ctx context.Context) (*net.UDPConn, error) {
 	}
 
 	w.logger.Info().Str("server_ip", serverIP.String()).Msg("Resolving server UDP address using IP address")
-	serverAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(serverIP.String(), w.serverPort))
+	serverAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(serverIP.String(), strconv.Itoa(int(w.serverPort))))
 	if nil != err {
 		return nil, fmt.Errorf("worker: failed to resolve server address: %v", err)
 	}
@@ -365,10 +472,11 @@ func (w *Worker) connect(ctx context.Context) (*net.UDPConn, error) {
 	if nil != err {
 		return nil, fmt.Errorf("worker: failed to connect to server: %v", err)
 	}
-	if err := conn.SetReadBuffer(w.bufferSize); nil != err {
+
+	if err := conn.SetReadBuffer(w.readBufferSize); nil != err {
 		return nil, fmt.Errorf("worker: failed to set read buffer: %v", err)
 	}
-	if err := conn.SetWriteBuffer(w.bufferSize); nil != err {
+	if err := conn.SetWriteBuffer(w.writeBufferSize); nil != err {
 		return nil, fmt.Errorf("worker: failed to set write buffer: %v", err)
 	}
 

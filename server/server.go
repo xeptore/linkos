@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/netip"
-	"os"
 	"slices"
 	"strconv"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
-	"golang.org/x/sys/unix"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
@@ -70,6 +68,14 @@ func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int)
 	for i := range clients {
 		client := make([]*ClientConnection, len(config.DefaultClientRecvPorts))
 		clients[i] = client
+		for j := range len(config.DefaultClientRecvPorts) {
+			clients[i][j] = &ClientConnection{
+				Conn:          Discard,
+				ConnFd:        0,
+				LastKeepAlive: time.Now().Unix(),
+				IsIdle:        false,
+			}
+		}
 	}
 
 	server := &Server{
@@ -130,8 +136,8 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	protoAddrs := lo.Map(
 		slices.Concat(config.DefaultClientRecvPorts, config.DefaultClientSendPorts),
-		func(port string, _ int) string {
-			return "udp4://" + net.JoinHostPort(s.bindHost, port)
+		func(port uint16, _ int) string {
+			return "udp4://" + net.JoinHostPort(s.bindHost, strconv.Itoa(int(port)))
 		},
 	)
 	s.logger.Debug().Strs("proto_addrs", protoAddrs).Msg("Starting engine")
@@ -165,7 +171,7 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 			if now-conn.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold {
 				conn.IsIdle = true
 				logger := s.logger.With().Int("client_idx", clientIdx).Int("port_idx", portIdx).Logger()
-				logger.Debug().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
+				logger.Warn().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
 				if err := conn.Conn.Close(); nil != err {
 					logger.Error().Err(err).Msg("Failed to close stale client connection")
 				} else {
@@ -174,58 +180,28 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 			}
 		}
 	}
-	// for clientIdx := 0; clientIdx < len(s.clients); clientIdx++ {
-	// 	for portIdx := 0; portIdx < len(config.DefaultClientRecvPorts); portIdx++ {
-	// 		conn := s.clients[clientIdx][portIdx]
-	// 		if now-conn.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold {
-	// 			conn.IsIdle = true
-	// 			logger := s.logger.With().Int("client_idx", clientIdx).Int("port_idx", portIdx).Logger()
-	// 			logger.Debug().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
-	// 			if err := conn.Conn.Close(); nil != err {
-	// 				logger.Error().Err(err).Msg("Failed to close stale client connection")
-	// 			} else {
-	// 				logger.Debug().Msg("Closed stale client connection")
-	// 			}
-	// 		}
-	// 	}
-	// }
 	return s.tick, gnet.None
 }
 
-func clientIdxFromIP(ip net.IP) int { // TODO: test this function
-	return int(ip[3])
-}
-
 func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
-	recvBufferSize, err := unix.GetsockoptInt(conn.Fd(), unix.SOL_SOCKET, unix.SO_RCVBUF)
-	fmt.Printf("\n\n\n\nRecv buffer size: %d\n\n\n\n", recvBufferSize)
-	if err := os.NewSyscallError("getsockopt", err); nil != err {
-		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to get socket receive buffer size")
-		return gnet.Close
-	}
-	return gnet.None
-
 	packet, err := conn.Next(-1)
 	if nil != err {
 		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to read packet")
 		return gnet.Close
 	}
 
-	var (
-		remoteAddr = conn.RemoteAddr().String()
-		localAddr  = conn.LocalAddr().String()
-	)
+	localAddr := conn.LocalAddr().String()
 	localAddrPort, err := netip.ParseAddrPort(localAddr)
 	if nil != err {
 		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to parse local address")
 		return gnet.Close
 	}
-	localPort := strconv.Itoa(int(localAddrPort.Port()))
+	localPort := localAddrPort.Port()
 	logger := s.logger.
 		With().
-		Str("remote_addr", remoteAddr).
+		Str("remote_addr", conn.RemoteAddr().String()).
 		Str("local_addr", localAddr).
-		Str("local_port", localPort).
+		Uint16("local_port", localPort).
 		Logger()
 
 	if n := conn.InboundBuffered(); n > 0 {
@@ -248,8 +224,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 
-	prvIP := srcIP.String()
-	logger = logger.With().Str("src_ip", prvIP).Str("dst_ip", dstIP.String()).Logger()
+	logger = logger.With().Str("src_ip", srcIP.String()).Str("dst_ip", dstIP.String()).Logger()
 	logger.Debug().Msg("Received packet")
 
 	clientIdx := clientIdxFromIP(srcIP)
@@ -258,35 +233,19 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 
-	if idx := clientSendPortIdx(localAddr); idx != -1 {
-		// clientConn := client[idx]
-		// if connFd := conn.Fd(); clientConn.ConnFd != connFd {
-		// 	if err := conn.SetReadBuffer(s.bufferSize); nil != err {
-		// 		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
-		// 	} else {
-		// 		logger.Debug().Msg("Set connection read buffer size")
-		// 	}
-		// 	if err := conn.SetWriteBuffer(s.bufferSize); nil != err {
-		// 		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set write buffer")
-		// 	} else {
-		// 		logger.Debug().Msg("Set connection write buffer size")
-		// 	}
-		// 	clientConn.Conn = conn
-		// 	clientConn.ConnFd = connFd
-		// }
-
+	if idx := slices.Index(config.DefaultClientSendPorts, localPort); idx != -1 {
 		switch {
 		case dstIP.Equal(s.gatewayIP):
 			logger.Debug().Msg("Handled client keep-alive packet")
 			return gnet.None
 		case dstIP.Equal(s.broadcastIP):
 			logger.Debug().Msg("Broadcasting packet")
-			for dstClientIdx, dstClientConn := range s.clients {
+			for dstClientIdx, dstClient := range s.clients {
 				if clientIdx == dstClientIdx {
 					continue
 				}
 				logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-				for dstLocalPort, dstConn := range dstClientConn {
+				for dstLocalPort, dstConn := range dstClient {
 					if dstConn.IsIdle {
 						logger.Debug().Int("dst_local_port", dstLocalPort).Msg("Skipping idle client connection")
 						continue
@@ -307,12 +266,12 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		default:
 			logger.Debug().Msg("Forwarding packet")
 			dstClientIdx := clientIdxFromIP(dstIP)
-			if dstClientIdx > len(s.clients) {
+			if dstClientIdx >= len(s.clients) {
 				logger.Debug().Int("dst_client_idx", dstClientIdx).Msg("Ignoring packet with out of range destination client index")
 				return gnet.None
 			}
-			clientConn := s.clients[dstClientIdx]
-			for dstLocalPort, dstConn := range clientConn {
+			dstClient := s.clients[dstClientIdx]
+			for dstLocalPort, dstConn := range dstClient {
 				if dstConn.IsIdle {
 					logger.Debug().Int("dst_local_port", dstLocalPort).Msg("Skipping idle client connection")
 					continue
@@ -330,7 +289,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			}
 			return gnet.None
 		}
-	} else if idx := clientRecvPortIdx(localAddr); idx != -1 {
+	} else if idx := slices.Index(config.DefaultClientRecvPorts, localPort); idx != -1 {
 		clientConn := s.clients[clientIdx][idx]
 		if connFd := conn.Fd(); clientConn.ConnFd != connFd || clientConn.IsIdle {
 			if err := conn.SetReadBuffer(s.bufferSize); nil != err {
@@ -344,9 +303,10 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				logger.Debug().Msg("Set connection write buffer size")
 			}
 			clientConn = &ClientConnection{
-				Conn:   conn,
-				ConnFd: connFd,
-				IsIdle: false,
+				Conn:          conn,
+				ConnFd:        connFd,
+				LastKeepAlive: time.Now().Unix(),
+				IsIdle:        false,
 			}
 			s.clients[clientIdx][idx] = clientConn
 		}
@@ -358,26 +318,8 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 	}
 }
 
-// TODO: check out of range array accesses
-// TODO: check nil pointer dereferences
-// TODO: check gnet sets default buffer size for connections
-
-func clientSendPortIdx(p string) int {
-	for i, port := range config.DefaultClientSendPorts {
-		if p == port {
-			return i
-		}
-	}
-	return -1
-}
-
-func clientRecvPortIdx(p string) int {
-	for i, port := range config.DefaultClientRecvPorts {
-		if p == port {
-			return i
-		}
-	}
-	return -1
+func clientIdxFromIP(ip net.IP) int {
+	return int(ip[3] - 2)
 }
 
 func parseIPv4Header(packet []byte) (srcIP, destIP net.IP, err error) {

@@ -19,6 +19,6 @@ const (
 )
 
 var (
-	DefaultClientSendPorts = []string{"48931", "52342", "47124", "53210"}
-	DefaultClientRecvPorts = []string{"47556", "52811", "49673", "52388"}
+	DefaultClientSendPorts = []uint16{48931, 52342, 47124, 53210}
+	DefaultClientRecvPorts = []uint16{47556, 52811, 49673, 52388}
 )
