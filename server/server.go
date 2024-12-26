@@ -283,7 +283,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				} else if written != len(packet) {
 					logger.Error().Int("written", written).Msg("Failed to write entire packet")
 				} else {
-					logger.Debug().Msg("Forwarding packet to client")
+					logger.Debug().Msg("Forwarded packet to client")
 				}
 				break
 			}
