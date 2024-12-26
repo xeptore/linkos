@@ -8,7 +8,6 @@ const (
 	DefaultServerLogLevel                = zerolog.InfoLevel
 	DefaultClientLogLevel                = zerolog.InfoLevel
 	DefaultTunRingSizePower              = 17
-	DefaultClientIncomingThreads         = 4
 	DefaultClientTunDeviceMTU            = 1280
 	DefaultBufferSize                    = 1280
 	DefaultServerInitialAllocatedClients = 10
