@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/xeptore/linkos/client/worker"
 	"github.com/xeptore/linkos/config"
+	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/pool"
 	"github.com/xeptore/linkos/tun"
 )
@@ -35,6 +37,16 @@ func (c *Client) run(ctx context.Context) error {
 		return fmt.Errorf("client: failed to start session: %v", err)
 	}
 
+	reader := session.Reader(ctx)
+	defer func() {
+		if err := reader.Close(); nil != err {
+			if errors.Is(err, ctx.Err()) {
+				return
+			}
+			c.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to close session packet reader")
+		}
+	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -47,8 +59,28 @@ func (c *Client) run(ctx context.Context) error {
 		}
 	}()
 
-	for idx, port := range config.DefaultPorts {
-		w := worker.New(c.logger.With().Int("worker_id", idx).Logger(), c.bufferSize, c.ip, c.serverHost, port, session)
+	for idx, port := range config.DefaultClientRecvPorts {
+		w := worker.NewRecv(
+			c.logger.With().Str("kind", "recv").Int("worker_id", idx).Logger(),
+			c.bufferSize,
+			c.ip,
+			c.serverHost,
+			port,
+			session,
+		)
+		wg.Add(1)
+		go w.Run(ctx, &wg)
+	}
+
+	for idx, port := range config.DefaultClientSendPorts {
+		w := worker.NewSend(
+			c.logger.With().Str("kind", "send").Int("worker_id", idx).Logger(),
+			c.bufferSize,
+			c.ip,
+			c.serverHost,
+			port,
+			reader.Packets,
+		)
 		wg.Add(1)
 		go w.Run(ctx, &wg)
 	}
