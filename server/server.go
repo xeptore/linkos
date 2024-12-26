@@ -332,7 +332,7 @@ func parseIPv4Header(packet []byte) (srcIP, destIP net.IP, err error) {
 
 	srcIP = net.IPv4(packet[12], packet[13], packet[14], packet[15])
 	destIP = net.IPv4(packet[16], packet[17], packet[18], packet[19])
-	return srcIP, destIP, nil
+	return srcIP.To4(), destIP.To4(), nil
 }
 
 func getBroadcastIP(subnet *net.IPNet) (net.IP, error) {
