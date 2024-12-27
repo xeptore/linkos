@@ -190,7 +190,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 	packet := s.pool.AcquirePacket()
 	defer packet.ReturnToPool()
 
-	n, err := conn.Read(packet.Buf.B)
+	n, err := io.Copy(packet.Buf, conn)
 	if nil != err {
 		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to read packet")
 		return gnet.Close
