@@ -123,8 +123,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 
 	opts := []gnet.Option{
-		gnet.WithMulticore(true),
-		gnet.WithNumEventLoop(len(config.DefaultClientRecvPorts) + len(config.DefaultClientSendPorts)),
+		gnet.WithMulticore(false),
 		gnet.WithLoadBalancing(gnet.RoundRobin),
 		gnet.WithReuseAddr(false),
 		gnet.WithReusePort(false),
