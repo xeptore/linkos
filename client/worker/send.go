@@ -66,6 +66,7 @@ func (w *Send) Run(ctx context.Context, wg *sync.WaitGroup) {
 				if err := ctx.Err(); nil != err {
 					return
 				}
+				w.logger.Info().Msg("Reconnecting...")
 				continue
 			}
 		}
@@ -132,7 +133,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 		switch {
 		case errors.Is(err, net.ErrClosed):
 		case netutil.IsConnInterruptedError(err):
-			logger.Error().Err(err).Msg("Failed to write packet to tunnel as connection already closed.")
+			logger.Warn().Msg("Failed to write packet to tunnel as connection was interrupted.")
 		default:
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error sending data to server")
 		}
