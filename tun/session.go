@@ -152,7 +152,8 @@ func (s *Session) Reader(ctx context.Context) *SessionReader {
 
 				packetLen := len(packet)
 				if packetLen > s.pool.PacketMaxSize {
-					s.logger.Error().
+					s.logger.
+						Error().
 						Int("packet_size", packetLen).
 						Int("buffer_max_size", s.pool.PacketMaxSize).
 						Msg("Packet received from TUN exceeds max buffer size. Dropping packet")
@@ -160,7 +161,21 @@ func (s *Session) Reader(ctx context.Context) *SessionReader {
 				}
 
 				clone := s.pool.AcquirePacket()
-				clone.Payload.Write(packet)
+				if written, err := clone.Buf.Write(packet); nil != err {
+					s.logger.
+						Error().
+						Err(err).
+						Int("packet_size", packetLen).
+						Msg("Failed to write TUN-received packet to buffer pool clone")
+					continue
+				} else if written != len(packet) {
+					s.logger.
+						Error().
+						Err(err).
+						Int("packet_bytes", packetLen).
+						Int("written_bytes", written).
+						Msg("Unexpected written bytes in clone packet write")
+				}
 				s.s.ReleaseReceivePacket(packet)
 				clone.Size = packetLen
 				packets <- clone
