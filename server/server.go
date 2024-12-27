@@ -21,12 +21,14 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/pool"
 )
 
 type (
 	Server struct {
 		gnet.BuiltinEventEngine
 		engine      gnet.Engine
+		pool        pool.Pool
 		bindHost    string
 		bindDev     string
 		bufferSize  int
@@ -81,6 +83,7 @@ func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int)
 	server := &Server{
 		BuiltinEventEngine: gnet.BuiltinEventEngine{},
 		engine:             gnet.Engine{},
+		pool:               pool.New(bufferSize),
 		bindHost:           bindHost,
 		bindDev:            bindDev,
 		bufferSize:         bufferSize,
@@ -184,11 +187,15 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 }
 
 func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
-	packet, err := conn.Next(-1)
+	packet := s.pool.AcquirePacket()
+	defer packet.ReturnToPool()
+
+	n, err := conn.Read(packet.Buf.B)
 	if nil != err {
 		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to read packet")
 		return gnet.Close
 	}
+	packetBytes := packet.Buf.B[:n]
 
 	localAddr := conn.LocalAddr().String()
 	localAddrPort, err := netip.ParseAddrPort(localAddr)
@@ -205,17 +212,17 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		Logger()
 
 	if n := conn.InboundBuffered(); n > 0 {
-		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packet)).Msg("More packets in buffer")
+		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packetBytes)).Msg("More packets in buffer")
 	}
 
-	if l := len(packet); l < 20 {
+	if l := len(packetBytes); l < 20 {
 		s.logger.Debug().Int("bytes", l).Msg("Ignoring invalid IP packet")
 		return gnet.None
 	} else {
 		logger = logger.With().Int("bytes", l).Logger()
 	}
 
-	srcIP, dstIP, err := parseIPv4Header(packet)
+	srcIP, dstIP, err := parseIPv4Header(packetBytes)
 	if nil != err {
 		s.logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to parse packet IP header")
 		return gnet.None
@@ -252,9 +259,9 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 					}
 					logger = logger.With().Int("dst_local_port", dstLocalPortIdx).Logger()
 					logger.Debug().Msg("Forwarding broadcast packet to client")
-					if written, err := dstConn.Conn.Write(packet); nil != err {
+					if written, err := dstConn.Conn.Write(packetBytes); nil != err {
 						logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
-					} else if written != len(packet) {
+					} else if written != len(packetBytes) {
 						logger.Error().Int("written", written).Msg("Failed to write entire packet")
 					} else {
 						logger.Debug().Msg("Forwarded broadcast packet to client")
@@ -279,9 +286,9 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				}
 				logger = logger.With().Int("dst_local_port_idx", dstLocalPortIdx).Logger()
 				logger.Debug().Msg("Forwarding packet to client")
-				if written, err := dstConn.Conn.Write(packet); nil != err {
+				if written, err := dstConn.Conn.Write(packetBytes); nil != err {
 					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
-				} else if written != len(packet) {
+				} else if written != len(packetBytes) {
 					logger.Error().Int("written", written).Msg("Failed to write entire packet")
 				} else {
 					logger.Debug().Msg("Forwarded packet to client")
