@@ -13,20 +13,43 @@ type ErrInfo struct {
 	Children   []ErrInfo
 }
 
-func (e ErrInfo) LogDict() *zerolog.Event {
+func (i ErrInfo) logDict() *zerolog.Event {
 	children := zerolog.Arr()
-	if len(e.Children) > 0 {
-		for _, child := range e.Children {
-			children.Dict(child.LogDict())
+	if len(i.Children) > 0 {
+		for _, child := range i.Children {
+			children.Dict(child.logDict())
 		}
 	}
 
 	return zerolog.
 		Dict().
-		Str("message", e.Message).
-		Str("type_name", e.TypeName).
-		Str("syntax_repr", e.SyntaxRepr).
+		Str("message", i.Message).
+		Str("type_name", i.TypeName).
+		Str("syntax_repr", i.SyntaxRepr).
 		Array("children", children)
+}
+
+func TreeLog(err error) func(*zerolog.Event) {
+	info := Tree(err)
+
+	children := zerolog.Arr()
+	if len(info.Children) > 0 {
+		for _, child := range info.Children {
+			children.Dict(child.logDict())
+		}
+	}
+
+	return func(e *zerolog.Event) {
+		e.Dict(
+			"err_tree",
+			zerolog.
+				Dict().
+				Str("message", info.Message).
+				Str("type_name", info.TypeName).
+				Str("syntax_repr", info.SyntaxRepr).
+				Array("children", children),
+		)
+	}
 }
 
 func Tree(err error) ErrInfo {

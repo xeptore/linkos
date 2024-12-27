@@ -47,17 +47,21 @@ func main() {
 		case <-ctx.Done():
 			logger.Trace().Msg("Context canceled before receiving a close signal")
 		case <-c:
-			logger.Info().Msg("Close signal received. Exiting...")
+			logger.Warn().Msg("Close signal received. Exiting...")
 			signal.Stop(c)
 			cancel()
 		}
 	}()
 
-	logger.WithLevel(log.NoLevel).Msg("Starting server")
+	logger.WithLevel(log.Levelless).Msg("Starting server")
 
 	if err := run(ctx, logger); nil != err {
 		if !errors.Is(err, ctx.Err()) {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to run server")
+			if errors.Is(err, os.ErrNotExist) {
+				logger.Error().Msg("Failed to run server as config file does not exist")
+			} else {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to run server")
+			}
 		}
 	}
 
@@ -70,12 +74,12 @@ func main() {
 func run(ctx context.Context, logger zerolog.Logger) error {
 	cfg, err := config.LoadServer("config.ini")
 	if nil != err {
-		return fmt.Errorf("config: failed to load: %v", err)
+		return fmt.Errorf("config: failed to load: %w", err)
 	}
 	logger = logger.Level(cfg.LogLevel)
 	logger.Debug().Dict("config", cfg.LogDict()).Msg("Loaded configuration")
 
-	srv, err := server.New(logger, cfg.IPNet, cfg.BindAddr, cfg.BindDev, cfg.BufferSize)
+	srv, err := server.New(logger, cfg.IPNet, cfg.BindHost, cfg.BindDev, cfg.BufferSize)
 	if nil != err {
 		return fmt.Errorf("server: failed to create server: %v", err)
 	}

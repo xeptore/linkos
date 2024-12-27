@@ -1,45 +1,54 @@
 package pool
 
 import (
-	"bytes"
-	"sync"
+	"github.com/valyala/bytebufferpool"
 )
 
-type PacketPool struct {
-	pool          *sync.Pool
+type Pool struct {
+	pool          *bytebufferpool.Pool
 	PacketMaxSize int
 }
 
-func New(size int) *PacketPool {
-	pool := &sync.Pool{
-		New: func() interface{} {
-			return bytes.NewBuffer(make([]byte, 0, size))
-		},
+func New(bufferSize int) Pool {
+	pool := new(bytebufferpool.Pool)
+	seed(pool, bufferSize)
+	return Pool{
+		pool:          pool,
+		PacketMaxSize: bufferSize,
 	}
-	seed(pool)
-	return &PacketPool{pool: pool, PacketMaxSize: size}
 }
 
-func seed(p *sync.Pool) {
-	for range 100 {
-		p.Put(p.New())
+func seed(p *bytebufferpool.Pool, bufferSize int) {
+	var (
+		bufs  = make([]*bytebufferpool.ByteBuffer, 0, 100)
+		whole = make([]byte, 100*bufferSize)
+	)
+	for i := range 100 {
+		buf := p.Get()
+		buf.Set(whole[i*100 : (i+1)*100])
+		bufs = append(bufs, buf)
+	}
+	for i := range 100 {
+		p.Put(bufs[i])
 	}
 }
 
 type Packet struct {
-	Payload *bytes.Buffer
-	Size    int
-	pool    *sync.Pool
+	Buf  *bytebufferpool.ByteBuffer
+	Size int
+	pool *bytebufferpool.Pool
 }
 
 func (b *Packet) ReturnToPool() {
-	b.pool.Put(b.Payload)
+	b.Buf.Reset()
+	b.Size = 0
+	b.pool.Put(b.Buf)
 }
 
-func (bp *PacketPool) AcquirePacket() *Packet {
+func (bp *Pool) AcquirePacket() *Packet {
 	return &Packet{
-		Payload: bp.pool.Get().(*bytes.Buffer),
-		Size:    0,
-		pool:    bp.pool,
+		Buf:  bp.pool.Get(),
+		Size: 0,
+		pool: bp.pool,
 	}
 }

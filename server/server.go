@@ -4,46 +4,53 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/netip"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
-	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
+	"github.com/samber/lo"
 	"go.uber.org/zap"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/pool"
 )
 
 type (
 	Server struct {
 		gnet.BuiltinEventEngine
 		engine      gnet.Engine
-		bindAddr    string
+		pool        pool.Pool
+		bindHost    string
 		bindDev     string
 		bufferSize  int
 		broadcastIP net.IP
 		gatewayIP   net.IP
 		subnetIPNet *net.IPNet
 		tick        time.Duration
-		clients     *xsync.MapOf[ClientPrivateIP, *Client]
+		clients     []Client
 		logger      zerolog.Logger
 	}
-	ClientPrivateIP = string
-	Client          struct {
-		Addr          string
-		Conn          gnet.Conn
+	ClientPrivateIP  = string
+	LocalConnAddr    = string
+	Client           []*ClientConnection
+	ClientConnection struct {
+		Conn          io.WriteCloser
+		ConnFd        int
 		LastKeepAlive int64
-		Disconnected  bool
-		l             *xsync.RBMutex
+		IsIdle        bool
 	}
 )
 
-func New(logger zerolog.Logger, ipNet, bindAddr, bindDev string, bufferSize int) (*Server, error) {
+func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int) (*Server, error) {
 	ip, subnetIPNet, err := net.ParseCIDR(ipNet)
 	if nil != err {
 		return nil, fmt.Errorf("server: error parsing subnet CIDR: %v", err)
@@ -59,17 +66,32 @@ func New(logger zerolog.Logger, ipNet, bindAddr, bindDev string, bufferSize int)
 		return nil, fmt.Errorf("server: failed to get broadcast IP: %v", err)
 	}
 
+	clients := make([]Client, config.DefaultServerMaxClients)
+	for i := range clients {
+		client := make([]*ClientConnection, len(config.DefaultClientRecvPorts))
+		clients[i] = client
+		for j := range len(config.DefaultClientRecvPorts) {
+			clients[i][j] = &ClientConnection{
+				Conn:          Discard,
+				ConnFd:        0,
+				LastKeepAlive: time.Now().Unix(),
+				IsIdle:        false,
+			}
+		}
+	}
+
 	server := &Server{
 		BuiltinEventEngine: gnet.BuiltinEventEngine{},
 		engine:             gnet.Engine{},
-		bindAddr:           bindAddr,
+		pool:               pool.New(bufferSize),
+		bindHost:           bindHost,
 		bindDev:            bindDev,
 		bufferSize:         bufferSize,
 		broadcastIP:        broadcastIP,
 		gatewayIP:          gatewayIP,
 		subnetIPNet:        subnetIPNet,
 		tick:               config.DefaultServerCleanupIntervalSec * time.Second,
-		clients:            xsync.NewMapOf[ClientPrivateIP, *Client](xsync.WithPresize(config.DefaultServerInitialAllocatedClients), xsync.WithGrowOnly()),
+		clients:            clients,
 		logger:             logger,
 	}
 	return server, nil
@@ -87,22 +109,23 @@ func (s *Server) Run(ctx context.Context) error {
 		s.logger.Debug().Msg("Stopping server engine due to parent context cancellation")
 		if err := s.engine.Stop(ctx); nil != err {
 			if !errors.Is(err, ctx.Err()) {
-				s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to stop server engine")
+				s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to stop server engine")
 			}
 		}
-		s.clients.Range(func(ip string, c *Client) bool {
-			if err := c.Conn.Close(); nil != err {
-				s.logger.Error().Err(err).Str("ip", ip).Msg("Failed to close client connection")
+		for clientIdx, clientConn := range s.clients {
+			for portIdx, conn := range clientConn {
+				if err := conn.Conn.Close(); nil != err {
+					s.logger.Error().Err(err).Int("port_idx", portIdx).Int("client_idx", clientIdx).Msg("Failed to close client connection")
+				}
 			}
-			return true
-		})
+		}
 		s.logger.Debug().Msg("Server engine stopped")
 	}()
 
 	opts := []gnet.Option{
 		gnet.WithMulticore(true),
-		gnet.WithNumEventLoop(config.DefaultServerInitialAllocatedClients),
-		gnet.WithLoadBalancing(gnet.SourceAddrHash),
+		gnet.WithNumEventLoop(len(config.DefaultClientRecvPorts) + len(config.DefaultClientSendPorts)),
+		gnet.WithLoadBalancing(gnet.RoundRobin),
 		gnet.WithReuseAddr(false),
 		gnet.WithReusePort(false),
 		gnet.WithBindToDevice(s.bindDev),
@@ -114,18 +137,19 @@ func (s *Server) Run(ctx context.Context) error {
 		gnet.WithSocketSendBuffer(config.DefaultMaxKernelSendBufferSize),
 		gnet.WithLogger(logging.Logger(zap.NewNop().Sugar())),
 	}
-	if err := gnet.Run(s, "udp4://"+s.bindAddr, opts...); nil != err {
+	protoAddrs := lo.Map(
+		slices.Concat(config.DefaultClientRecvPorts, config.DefaultClientSendPorts),
+		func(port uint16, _ int) string {
+			return "udp4://" + net.JoinHostPort(s.bindHost, strconv.Itoa(int(port)))
+		},
+	)
+	s.logger.Debug().Strs("proto_addrs", protoAddrs).Msg("Starting engine")
+	if err := gnet.Rotate(s, protoAddrs, opts...); nil != err {
 		if errors.Is(err, ctx.Err()) {
-			s.logger.Debug().Msg("Server engine stopped due to context error. Waiting for server engine stopper goroutine to return")
-			wg.Wait()
-			s.logger.Debug().Msg("Server engine stopper goroutine returned")
+			s.logger.Debug().Msg("Server engine stopped due to context error")
 			return err
 		}
-		s.logger.Debug().Err(err).Msg("Server engine stopped due to unknown error. Waiting for server engine stopper goroutine to return")
-		cancel()
-		wg.Wait()
-		s.logger.Debug().Msg("Server engine stopper goroutine returned")
-		return fmt.Errorf("server: failed to run server: %w", err)
+		s.logger.Error().Err(err).Msg("Server engine stopped due to unknown error")
 	}
 
 	cancel()
@@ -145,150 +169,165 @@ func (s *Server) OnBoot(eng gnet.Engine) gnet.Action {
 
 func (s *Server) OnTick() (time.Duration, gnet.Action) {
 	now := time.Now().Unix()
-	s.clients.Range(func(ip string, client *Client) bool {
-		client.l.Lock()
-		if now-client.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold {
-			client.Disconnected = true
-			s.logger.Debug().Str("client_ip", ip).Msg("Marked client as disconnected due to passing missed keep-alive threshold")
-			if err := client.Conn.Close(); nil != err {
-				s.logger.Error().Err(err).Msg("Failed to close stale client connection")
-			} else {
-				s.logger.Debug().Msg("Closed stale client connection")
+	for clientIdx, clientConn := range s.clients {
+		for portIdx, conn := range clientConn {
+			if now-conn.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold {
+				conn.IsIdle = true
+				logger := s.logger.With().Int("client_idx", clientIdx).Int("port_idx", portIdx).Logger()
+				logger.Warn().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
+				if err := conn.Conn.Close(); nil != err {
+					logger.Error().Err(err).Msg("Failed to close stale client connection")
+				} else {
+					logger.Debug().Msg("Closed stale client connection")
+				}
 			}
 		}
-		client.l.Unlock()
-		return true
-	})
+	}
 	return s.tick, gnet.None
 }
 
-func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
-	packet, err := c.Next(-1)
+func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
+	packet := s.pool.AcquirePacket()
+	defer packet.ReturnToPool()
+
+	n, err := io.Copy(packet.Buf, conn)
 	if nil != err {
-		s.logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to read packet")
+		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to read packet")
 		return gnet.Close
 	}
+	packetBytes := packet.Buf.B[:n]
 
-	srcAddr := c.RemoteAddr().String()
-	logger := s.logger.With().Str("src_addr", srcAddr).Logger()
+	localAddr := conn.LocalAddr().String()
+	localAddrPort, err := netip.ParseAddrPort(localAddr)
+	if nil != err {
+		s.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to parse local address")
+		return gnet.Close
+	}
+	localPort := localAddrPort.Port()
+	logger := s.logger.
+		With().
+		Str("remote_addr", conn.RemoteAddr().String()).
+		Str("local_addr", localAddr).
+		Uint16("local_port", localPort).
+		Logger()
 
-	if n := c.InboundBuffered(); n > 0 {
-		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packet)).Msg("More packets in buffer")
+	if n := conn.InboundBuffered(); n > 0 {
+		s.logger.Warn().Int("bytes", n).Int("read_bytes", len(packetBytes)).Msg("More packets in buffer")
 	}
 
-	if l := len(packet); l < 20 {
+	if l := len(packetBytes); l < 20 {
 		s.logger.Debug().Int("bytes", l).Msg("Ignoring invalid IP packet")
 		return gnet.None
 	} else {
 		logger = logger.With().Int("bytes", l).Logger()
 	}
 
-	srcIP, dstIP, err := parseIPv4Header(packet)
+	srcIP, dstIP, err := parseIPv4Header(packetBytes)
 	if nil != err {
-		s.logger.Debug().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to parse packet IP header")
+		s.logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to parse packet IP header")
 		return gnet.None
-	}
-	prvIP := srcIP.String()
-	logger = logger.With().Str("src_ip", prvIP).Str("dst_ip", dstIP.String()).Logger()
-	logger.Debug().Msg("Received packet")
-
-	if !s.isInSubnet(srcIP) || !s.isInSubnet(dstIP) {
+	} else if !s.isInSubnet(srcIP) || !s.isInSubnet(dstIP) {
 		logger.Debug().Msg("Ignoring packet outside of subnet")
 		return gnet.None
 	}
 
-	client, existed := s.clients.LoadOrStore(
-		prvIP,
-		&Client{
-			Addr:          srcAddr,
-			Conn:          c,
-			LastKeepAlive: time.Now().Unix(),
-			Disconnected:  false,
-			l:             xsync.NewRBMutex(),
-		},
-	)
-	if existed {
-		logger.Debug().Msg("Client already exists")
-		newClient := &Client{
-			Addr:          srcAddr,
-			Conn:          c,
-			LastKeepAlive: time.Now().Unix(),
-			Disconnected:  false,
-			l:             xsync.NewRBMutex(),
-		}
+	logger = logger.With().Str("src_ip", srcIP.String()).Str("dst_ip", dstIP.String()).Logger()
+	logger.Debug().Msg("Received packet")
 
-		tk := client.l.RLock()
-		isDisconnected := client.Disconnected
-		client.l.RUnlock(tk)
+	clientIdx := clientIdxFromIP(srcIP)
+	if clientIdx < 0 || clientIdx >= len(s.clients) {
+		s.logger.Debug().Int("client_idx", clientIdx).Msg("Ignoring packet with out of range client index")
+		return gnet.None
+	}
 
-		if isDisconnected || client.Addr != srcAddr {
-			logger.
-				Debug().
-				Bool("is_disconnected", isDisconnected).
-				Str("stored_client_addr", client.Addr).
-				Msg("Replacing existing client")
-			if err := client.Conn.Close(); nil != err {
-				s.logger.Error().Err(err).Msg("Failed to close previous client connection")
+	if idx := slices.Index(config.DefaultClientSendPorts, localPort); idx != -1 {
+		switch {
+		case dstIP.Equal(s.gatewayIP):
+			logger.Debug().Msg("Handled client keep-alive packet")
+			return gnet.None
+		case dstIP.Equal(s.broadcastIP):
+			logger.Debug().Msg("Broadcasting packet")
+			for dstClientIdx, dstClient := range s.clients {
+				if clientIdx == dstClientIdx {
+					continue
+				}
+				logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
+				for dstLocalPortIdx, dstConn := range dstClient {
+					if dstConn.IsIdle {
+						logger.Debug().Int("dst_local_port", dstLocalPortIdx).Msg("Skipping idle client connection")
+						continue
+					}
+					logger = logger.With().Int("dst_local_port", dstLocalPortIdx).Logger()
+					logger.Debug().Msg("Forwarding broadcast packet to client")
+					if written, err := dstConn.Conn.Write(packetBytes); nil != err {
+						logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
+					} else if written != len(packetBytes) {
+						logger.Error().Int("written", written).Msg("Failed to write entire packet")
+					} else {
+						logger.Debug().Msg("Forwarded broadcast packet to client")
+					}
+					break
+				}
 			}
-			s.clients.Store(prvIP, newClient)
-			if err := c.SetReadBuffer(s.bufferSize); nil != err {
-				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set read buffer")
+			return gnet.None
+		default:
+			logger.Debug().Msg("Forwarding packet")
+			dstClientIdx := clientIdxFromIP(dstIP)
+			if dstClientIdx >= len(s.clients) {
+				logger.Debug().Int("dst_client_idx", dstClientIdx).Msg("Ignoring packet with out of range destination client index")
+				return gnet.None
+			}
+			logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
+			dstClient := s.clients[dstClientIdx]
+			for dstLocalPortIdx, dstConn := range dstClient {
+				if dstConn.IsIdle {
+					logger.Debug().Int("dst_local_port_idx", dstLocalPortIdx).Msg("Skipping idle client connection")
+					continue
+				}
+				logger = logger.With().Int("dst_local_port_idx", dstLocalPortIdx).Logger()
+				logger.Debug().Msg("Forwarding packet to client")
+				if written, err := dstConn.Conn.Write(packetBytes); nil != err {
+					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
+				} else if written != len(packetBytes) {
+					logger.Error().Int("written", written).Msg("Failed to write entire packet")
+				} else {
+					logger.Debug().Msg("Forwarded packet to client")
+				}
+				break
+			}
+			return gnet.None
+		}
+	} else if idx := slices.Index(config.DefaultClientRecvPorts, localPort); idx != -1 {
+		clientConn := s.clients[clientIdx][idx]
+		if connFd := conn.Fd(); clientConn.ConnFd != connFd || clientConn.IsIdle {
+			if err := conn.SetReadBuffer(s.bufferSize); nil != err {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
 			} else {
 				logger.Debug().Msg("Set connection read buffer size")
 			}
-			if err := c.SetWriteBuffer(s.bufferSize); nil != err {
-				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set write buffer")
+			if err := conn.SetWriteBuffer(s.bufferSize); nil != err {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set write buffer")
 			} else {
 				logger.Debug().Msg("Set connection write buffer size")
 			}
+			clientConn = &ClientConnection{
+				Conn:          conn,
+				ConnFd:        connFd,
+				LastKeepAlive: time.Now().Unix(),
+				IsIdle:        false,
+			}
+			s.clients[clientIdx][idx] = clientConn
 		}
+		clientConn.LastKeepAlive = time.Now().Unix()
+		return gnet.None
 	} else {
-		logger.Debug().Msg("New client added")
-		if err := c.SetReadBuffer(s.bufferSize); nil != err {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set read buffer")
-		} else {
-			logger.Debug().Msg("Set connection read buffer size")
-		}
-		if err := c.SetWriteBuffer(s.bufferSize); nil != err {
-			logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to set write buffer")
-		} else {
-			logger.Debug().Msg("Set connection write buffer size")
-		}
+		logger.Debug().Msg("Ignoring packet with invalid port")
+		return gnet.Close
 	}
+}
 
-	switch {
-	case dstIP.Equal(s.gatewayIP):
-		logger.Debug().Msg("Handling keep-alive packet")
-		client.l.Lock()
-		client.LastKeepAlive = time.Now().Unix()
-		client.l.Unlock()
-		logger.Debug().Msg("Updated client keep-alive timestamp")
-	case dstIP.Equal(s.broadcastIP):
-		logger.Debug().Msg("Broadcasting packet")
-		s.clients.Range(func(ip string, client *Client) bool {
-			if ip != prvIP {
-				logger = logger.With().Str("dst_ip", ip).Str("dst_addr", client.Addr).Logger()
-				logger.Debug().Msg("Broadcasting packet to client")
-				if _, err := client.Conn.Write(packet); nil != err {
-					logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write packet")
-				} else {
-					logger.Debug().Msg("Broadcasted packet to client")
-				}
-			}
-			return true
-		})
-	default:
-		logger.Debug().Msg("Forwarding packet")
-		if client, ok := s.clients.Load(dstIP.String()); ok {
-			if _, err := client.Conn.Write(packet); nil != err {
-				logger.Error().Err(err).Dict("err_tree", errutil.Tree(err).LogDict()).Msg("Failed to write packet")
-			} else {
-				logger.Debug().Msg("Forwarded packet to client")
-			}
-		}
-	}
-
-	return gnet.None
+func clientIdxFromIP(ip net.IP) int {
+	return int(ip[3] - 2)
 }
 
 func parseIPv4Header(packet []byte) (srcIP, destIP net.IP, err error) {
@@ -301,7 +340,7 @@ func parseIPv4Header(packet []byte) (srcIP, destIP net.IP, err error) {
 
 	srcIP = net.IPv4(packet[12], packet[13], packet[14], packet[15])
 	destIP = net.IPv4(packet[16], packet[17], packet[18], packet[19])
-	return srcIP, destIP, nil
+	return srcIP.To4(), destIP.To4(), nil
 }
 
 func getBroadcastIP(subnet *net.IPNet) (net.IP, error) {

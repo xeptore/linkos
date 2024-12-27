@@ -20,7 +20,7 @@ func validateBufferSize(n int) error {
 }
 
 type Server struct {
-	BindAddr   string
+	BindHost   string
 	BindDev    string
 	IPNet      string
 	BufferSize int
@@ -30,7 +30,7 @@ type Server struct {
 func (s *Server) LogDict() *zerolog.Event {
 	return zerolog.
 		Dict().
-		Str("bind_address", s.BindAddr).
+		Str("bind_host", s.BindHost).
 		Str("bind_dev", s.BindDev).
 		Str("ip_net", s.IPNet).
 		Int("buffer_size", s.BufferSize).
@@ -56,7 +56,7 @@ func LoadServer(filename string) (*Server, error) {
 		return nil, fmt.Errorf("config: failed to load: %v", err)
 	}
 
-	bindAddr := strings.TrimSpace(cfg.Section("").Key("bind_address").String())
+	bindHost := strings.TrimSpace(cfg.Section("").Key("bind_host").String())
 	bindDev := strings.TrimSpace(cfg.Section("").Key("bind_dev").String())
 	ipNet := strings.TrimSpace(cfg.Section("").Key("ip_net").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
@@ -71,7 +71,7 @@ func LoadServer(filename string) (*Server, error) {
 	}
 
 	out := Server{
-		BindAddr:   bindAddr,
+		BindHost:   bindHost,
 		BindDev:    bindDev,
 		IPNet:      ipNet,
 		BufferSize: bufferSize,
@@ -98,10 +98,8 @@ func LoadServer(filename string) (*Server, error) {
 }
 
 func (s *Server) validate() error {
-	if len(s.BindAddr) == 0 {
-		return errors.New("config: bind_address is required")
-	} else if _, err := net.ResolveUDPAddr("udp", s.BindAddr); nil != err {
-		return errors.New("config: bind_address must be a valid address")
+	if !isValidHostname(s.BindHost) {
+		return errors.New("config: bind_host host is not a valid hostname")
 	}
 
 	if len(s.BindDev) == 0 {

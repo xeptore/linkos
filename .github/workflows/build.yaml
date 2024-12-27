@@ -2,9 +2,10 @@ name: Build
 on:
   pull_request: 
     branches: 
-      - main
+      - dev
   push:
     branches:
+      - dev
       - main
 concurrency:
   group: ${{ github.workflow }}/${{ github.ref_type }}/${{ github.ref_name }}
@@ -226,7 +227,7 @@ jobs:
     outputs:
       tag_name: ${{ steps.generate.outputs.tag_name }}
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' && (github.ref_type == 'tag' || (github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch))
+    if: github.event_name == 'push' && (github.ref_type == 'tag' || (github.ref_type == 'branch' && (github.ref_name == github.event.repository.default_branch || github.ref_name == 'main')))
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -265,7 +266,7 @@ jobs:
         id: release_try_0
         with:
           name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: false
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           draft: false
           tag_name: ${{ needs.tag.outputs.tag_name }}
           fail_on_unmatched_files: true
@@ -279,7 +280,7 @@ jobs:
         id: release_try_1
         with:
           name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: false
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           draft: false
           tag_name: ${{ needs.tag.outputs.tag_name }}
           fail_on_unmatched_files: true
@@ -293,7 +294,7 @@ jobs:
         id: release_try_2
         with:
           name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: false
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           draft: false
           tag_name: ${{ needs.tag.outputs.tag_name }}
           fail_on_unmatched_files: true
@@ -307,7 +308,7 @@ jobs:
         id: release_try_3
         with:
           name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: false
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           draft: false
           tag_name: ${{ needs.tag.outputs.tag_name }}
           fail_on_unmatched_files: true

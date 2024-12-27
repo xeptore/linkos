@@ -10,12 +10,18 @@ tasks:
   tidy:
     cmd: go mod tidy -v -x
 
-  clear-build-dir:
+  clear-build-dir:client:
     cmds:
       - cmd: |-
-          rm -rf ./bin
-          mkdir -p ./bin/{client,server}
+          rm -rf ./bin/client
+          mkdir -p ./bin/client
           cp ./config/client.ini ./bin/client/config.ini
+
+  clear-build-dir:server:
+    cmds:
+      - cmd: |-
+          rm -rf ./bin/server
+          mkdir -p ./bin/server
           cp ./config/server.ini ./bin/server/config.ini
 
   build:client:
@@ -24,7 +30,7 @@ tasks:
       CC: clang
       CXX: clang++
     cmds:
-      - task: clear-build-dir
+      - task: clear-build-dir:client
       - cmd: |-
           go build \
             -a \
@@ -43,7 +49,7 @@ tasks:
       GOARCH:
         sh: go env GOARCH
     cmds:
-      - task: clear-build-dir
+      - task: clear-build-dir:server
       - cmd: |-
           go build \
             -a \

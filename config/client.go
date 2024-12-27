@@ -7,33 +7,27 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/rs/zerolog"
 	"gopkg.in/ini.v1"
-
-	"github.com/xeptore/linkos/mathutil"
-	"github.com/xeptore/linkos/wintun"
 )
 
 type Client struct {
-	ServerAddr      string
-	IP              string
-	IncomingThreads int
-	RingSize        uint32
-	BufferSize      int
-	MTU             uint32
-	LogLevel        zerolog.Level
+	ServerHost string
+	IP         string
+	RingSize   uint32
+	BufferSize int
+	MTU        uint32
+	LogLevel   zerolog.Level
 }
 
 func (c *Client) LogDict() *zerolog.Event {
 	return zerolog.
 		Dict().
-		Str("server_address", c.ServerAddr).
+		Str("server_host", c.ServerHost).
 		Str("ip", c.IP).
-		Int("incoming_threads", c.IncomingThreads).
 		Int("buffer_size", c.BufferSize).
 		Uint32("mtu", c.MTU).
 		Uint32("ring_size", c.RingSize).
@@ -49,24 +43,14 @@ func LoadClient(filename string) (*Client, error) {
 		return nil, fmt.Errorf("config: failed to load: %v", err)
 	}
 
-	serverAddr := strings.TrimSpace(cfg.Section("").Key("server_address").String())
+	serverHost := strings.TrimSpace(cfg.Section("").Key("server_host").String())
 
-	incomingThreads := DefaultClientIncomingThreads
-	if incomingThreadsStr := strings.TrimSpace(cfg.Section("").Key("incoming_threads").String()); len(incomingThreadsStr) != 0 {
-		i, err := strconv.Atoi(incomingThreadsStr)
-		if nil != err {
-			return nil, fmt.Errorf("config: invalid value of %q for incoming_threads configuration option, expected an integer", incomingThreadsStr)
+	var ringSizeExp uint32 = DefaultTunRingSize
+	if ringSizeExpStr := strings.TrimSpace(cfg.Section("").Key("ring_size").String()); len(ringSizeExpStr) != 0 {
+		if i, err := strconv.ParseUint(ringSizeExpStr, 10, 32); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for ring_size configuration option, expected an integer", ringSizeExpStr)
 		} else {
-			incomingThreads = i
-		}
-	}
-
-	var ringSize uint32 = DefaultTunRingSize
-	if ringSizeStr := strings.TrimSpace(cfg.Section("").Key("ring_size").String()); len(ringSizeStr) != 0 {
-		if i, err := strconv.ParseUint(ringSizeStr, 10, 32); nil != err {
-			return nil, fmt.Errorf("config: invalid value of %q for ring_size configuration option, expected an integer", ringSizeStr)
-		} else {
-			ringSize = uint32(i)
+			ringSizeExp = uint32(i)
 		}
 	}
 
@@ -93,13 +77,12 @@ func LoadClient(filename string) (*Client, error) {
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 
 	out := Client{
-		ServerAddr:      serverAddr,
-		IP:              ip,
-		IncomingThreads: incomingThreads,
-		RingSize:        ringSize,
-		BufferSize:      bufferSize,
-		MTU:             mtu,
-		LogLevel:        DefaultClientLogLevel,
+		ServerHost: serverHost,
+		IP:         ip,
+		RingSize:   ringSizeExp,
+		BufferSize: bufferSize,
+		MTU:        mtu,
+		LogLevel:   DefaultClientLogLevel,
 	}
 
 	if logLevel != "" {
@@ -128,21 +111,8 @@ func (c *Client) validate() error {
 		return errors.New("config: ip is not a valid IP address")
 	}
 
-	if c.IncomingThreads < 1 {
-		return errors.New("config: incoming_threads must be greater than or equal to 1")
-	}
-
-	if len(c.ServerAddr) == 0 {
-		return errors.New("config: server_address is required")
-	} else if hostname, port, err := net.SplitHostPort(c.ServerAddr); nil != err {
-		return errors.New("config: server_address must be a valid address")
-	} else {
-		if !isValidHostname(hostname) {
-			return errors.New("config: server_address host is not a valid hostname")
-		}
-		if err := validatePort(port); nil != err {
-			return fmt.Errorf("config: server_address port is not a valid port number: %v", err)
-		}
+	if !isValidHostname(c.ServerHost) {
+		return errors.New("config: server_host host is not a valid hostname")
 	}
 
 	if err := validateBufferSize(c.BufferSize); nil != err {
@@ -153,40 +123,18 @@ func (c *Client) validate() error {
 		return fmt.Errorf("config: mtu is invalid: %v", err)
 	}
 
-	if err := validateRingSize(c.RingSize); nil != err {
+	if err := validateRingSizeExp(c.RingSize); nil != err {
 		return fmt.Errorf("config: ring_size is invalid: %v", err)
 	}
 
 	return nil
 }
 
-func validateRingSize(n uint32) error {
-	if n < wintun.RingCapacityMin || n > wintun.RingCapacityMax {
-		return fmt.Errorf("must be in range %d - %d including", wintun.RingCapacityMin, wintun.RingCapacityMax)
+func validateRingSizeExp(n uint32) error {
+	if n < 1 || n > 10 {
+		return fmt.Errorf("must be in range %d - %d including", 1, 10)
 	}
 
-	if !mathutil.IsPowerOf2(n) {
-		return errors.New("must be a power of 2")
-	}
-
-	return nil
-}
-
-// Hostname regex based on RFC 1123.
-var validHostnameRegexp = regexp.MustCompile(`^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$`)
-
-func isValidHostname(host string) bool {
-	return validHostnameRegexp.MatchString(host)
-}
-
-func validatePort(port string) error {
-	p, err := strconv.Atoi(port)
-	if nil != err {
-		return errors.New("must be a number")
-	}
-	if p < 0 || p > 65535 {
-		return errors.New("out of range")
-	}
 	return nil
 }
 
