@@ -78,27 +78,41 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 		return
 	}
 
+	tick := time.Tick(config.DefaultKeepAliveIntervalSec * time.Second)
+	initialTick := time.After(1 * time.Second)
+
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Trace().Msg("Finishing keep-alive loop due to context cancellation")
 			return
-		case <-time.After(config.DefaultKeepAliveIntervalSec * time.Second):
-			logger.Trace().Msg("Sending keep-alive packet")
-			if written, err := conn.Write(packetBytes); nil != err {
-				if netutil.IsConnInterruptedError(err) {
-					logger.Error().Err(err).Msg("Failed to write packet keep-alive to tunnel as connection already closed.")
-				} else {
-					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write keep-alive packet to connection")
-				}
+		case <-initialTick:
+			if err := writeKeepAlivePacket(logger, packetBytes, conn); nil != err {
 				return
-			} else if written != len(packetBytes) {
-				logger.Error().Int("written", written).Int("expected", len(packetBytes)).Msg("Failed to write all bytes of keep-alive packet to connection")
-			} else {
-				logger.Trace().Msg("Sent keep-alive packet")
+			}
+		case <-tick:
+			if err := writeKeepAlivePacket(logger, packetBytes, conn); nil != err {
+				return
 			}
 		}
 	}
+}
+
+func writeKeepAlivePacket(logger zerolog.Logger, p []byte, conn *net.UDPConn) error {
+	logger.Trace().Msg("Sending keep-alive packet")
+	if written, err := conn.Write(p); nil != err {
+		if netutil.IsConnInterruptedError(err) {
+			logger.Warn().Msg("Failed to write keep-alive packet to tunnel as connection was interrupted.")
+		} else {
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write keep-alive packet to connection")
+		}
+		return err
+	} else if written != len(p) {
+		logger.Error().Int("written", written).Int("expected", len(p)).Msg("Failed to write all bytes of keep-alive packet to connection")
+	} else {
+		logger.Trace().Msg("Sent keep-alive packet")
+	}
+	return nil
 }
 
 func checksumIPv4(b []byte) int {
