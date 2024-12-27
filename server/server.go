@@ -75,7 +75,7 @@ func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int)
 				Conn:          Discard,
 				ConnFd:        0,
 				LastKeepAlive: time.Now().Unix(),
-				IsIdle:        false,
+				IsIdle:        true,
 			}
 		}
 	}
@@ -135,6 +135,7 @@ func (s *Server) Run(ctx context.Context) error {
 		gnet.WithTicker(true),
 		gnet.WithSocketRecvBuffer(config.DefaultMaxKernelRecvBufferSize),
 		gnet.WithSocketSendBuffer(config.DefaultMaxKernelSendBufferSize),
+		gnet.WithLogLevel(logging.PanicLevel),
 		gnet.WithLogger(logging.Logger(zap.NewNop().Sugar())),
 	}
 	protoAddrs := lo.Map(
@@ -171,7 +172,7 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 	now := time.Now().Unix()
 	for clientIdx, clientConn := range s.clients {
 		for portIdx, conn := range clientConn {
-			if now-conn.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold {
+			if now-conn.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold && !conn.IsIdle {
 				conn.IsIdle = true
 				logger := s.logger.With().Int("client_idx", clientIdx).Int("port_idx", portIdx).Logger()
 				logger.Warn().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
