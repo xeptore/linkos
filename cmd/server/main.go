@@ -57,7 +57,11 @@ func main() {
 
 	if err := run(ctx, logger); nil != err {
 		if !errors.Is(err, ctx.Err()) {
-			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to run server")
+			if errors.Is(err, os.ErrNotExist) {
+				logger.Error().Msg("Failed to run server as config file does not exist")
+			} else {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to run server")
+			}
 		}
 	}
 
@@ -70,7 +74,7 @@ func main() {
 func run(ctx context.Context, logger zerolog.Logger) error {
 	cfg, err := config.LoadServer("config.ini")
 	if nil != err {
-		return fmt.Errorf("config: failed to load: %v", err)
+		return fmt.Errorf("config: failed to load: %w", err)
 	}
 	logger = logger.Level(cfg.LogLevel)
 	logger.Debug().Dict("config", cfg.LogDict()).Msg("Loaded configuration")
