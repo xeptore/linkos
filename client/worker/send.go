@@ -66,6 +66,7 @@ func (w *Send) Run(ctx context.Context, wg *sync.WaitGroup) {
 				if err := ctx.Err(); nil != err {
 					return
 				}
+				w.logger.Info().Msg("Reconnecting...")
 				continue
 			}
 		}
