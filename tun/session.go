@@ -160,7 +160,7 @@ func (s *Session) Reader(ctx context.Context) *SessionReader {
 					continue
 				}
 
-				clone := s.pool.AcquirePacket(packetLen)
+				clone := s.pool.AcquirePacket(packetLen + 1) // Last byte will be used to set the connection ID
 				if written := copy(clone.B, packet); written != len(packet) {
 					s.logger.
 						Error().

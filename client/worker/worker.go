@@ -105,7 +105,8 @@ type Connection struct {
 }
 
 func (c *Connection) Write(p []byte) (int, error) {
-	return c.conn.Write(append(p, c.id))
+	p[len(p)-1] = c.id //nolint:staticcheck
+	return c.conn.Write(p)
 }
 
 func (c *Connection) Read(p []byte) (int, error) {
