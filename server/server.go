@@ -292,7 +292,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		}
 	} else if idx := slices.Index(config.DefaultClientRecvPorts, localPort); idx != -1 {
 		storedClientConn := s.clients[clientIdx][idx]
-		if connID := packetBytes[len(packetBytes)-1]; storedClientConn.ConnID != connID || storedClientConn.IsIdle {
+		if connID := packet[len(packet)-1]; storedClientConn.ConnID != connID || storedClientConn.IsIdle {
 			if err := conn.SetReadBuffer(s.bufferSize); nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
 			} else {
