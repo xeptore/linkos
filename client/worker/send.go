@@ -117,7 +117,7 @@ func (w *Send) handleOutbound(conn *net.UDPConn) error {
 func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Packet) error {
 	defer p.ReturnToPool()
 
-	payload := p.Buf.B
+	payload := p.B
 	if ok, err := filterOutgoingPacket(logger, payload); nil != err {
 		logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to filter packet")
 		return nil
