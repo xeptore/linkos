@@ -26,7 +26,7 @@ func NewRecv(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost str
 		common: common{
 			serverHost:      serverHost,
 			serverPort:      serverPort,
-			writeBufferSize: 128, // For the keep-alive packet
+			writeBufferSize: 128, // For keep-alive packets
 			readBufferSize:  bufferSize,
 			srcIP:           srcIP,
 			logger:          logger,

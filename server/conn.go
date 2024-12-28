@@ -14,4 +14,4 @@ func (DiscardConn) Close() error {
 	return nil
 }
 
-var Discard io.WriteCloser = DiscardConn{}
+var discard io.WriteCloser = DiscardConn{}

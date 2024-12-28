@@ -117,7 +117,7 @@ func (w *Send) handleOutbound(conn *net.UDPConn) error {
 func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Packet) error {
 	defer p.ReturnToPool()
 
-	payload := p.Buf.B
+	payload := p.B[:p.Size]
 	if ok, err := filterOutgoingPacket(logger, payload); nil != err {
 		logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to filter packet")
 		return nil
@@ -126,8 +126,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 		return nil
 	}
 
-	packetSize := p.Size
-	written, err := conn.Write(payload[:packetSize])
+	written, err := conn.Write(payload)
 	switch {
 	case nil != err:
 		switch {
@@ -138,8 +137,8 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error sending data to server")
 		}
 		return err
-	case written != packetSize:
-		logger.Error().Int("written", written).Int("expected", packetSize).Msg("Failed to write all bytes of packet to tunnel connection")
+	case written != p.Size:
+		logger.Error().Int("written", written).Int("expected", p.Size+1).Msg("Failed to write all bytes of packet to tunnel connection")
 	default:
 		logger.Trace().Int("bytes", written).Msg("Outgoing packet has been written to tunnel connection")
 	}

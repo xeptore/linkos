@@ -20,11 +20,12 @@ func validateBufferSize(n int) error {
 }
 
 type Server struct {
-	BindHost   string
-	BindDev    string
-	IPNet      string
-	BufferSize int
-	LogLevel   zerolog.Level
+	BindHost      string
+	BindDev       string
+	IPNet         string
+	NumEventLoops int
+	BufferSize    int
+	LogLevel      zerolog.Level
 }
 
 func (s *Server) LogDict() *zerolog.Event {
@@ -33,6 +34,7 @@ func (s *Server) LogDict() *zerolog.Event {
 		Str("bind_host", s.BindHost).
 		Str("bind_dev", s.BindDev).
 		Str("ip_net", s.IPNet).
+		Int("num_event_loops", s.NumEventLoops).
 		Int("buffer_size", s.BufferSize).
 		Str("log_level", s.LogLevel.String())
 }
@@ -70,12 +72,22 @@ func LoadServer(filename string) (*Server, error) {
 		}
 	}
 
+	numEventLoops := DefaultServerNumEventLoops
+	if numEventLoopsStr := strings.TrimSpace(cfg.Section("").Key("num_event_loops").String()); len(numEventLoopsStr) != 0 {
+		if i, err := strconv.Atoi(numEventLoopsStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for num_event_loops configuration option, expected an integer", numEventLoopsStr)
+		} else {
+			numEventLoops = i
+		}
+	}
+
 	out := Server{
-		BindHost:   bindHost,
-		BindDev:    bindDev,
-		IPNet:      ipNet,
-		BufferSize: bufferSize,
-		LogLevel:   DefaultServerLogLevel,
+		BindHost:      bindHost,
+		BindDev:       bindDev,
+		IPNet:         ipNet,
+		NumEventLoops: numEventLoops,
+		BufferSize:    bufferSize,
+		LogLevel:      DefaultServerLogLevel,
 	}
 
 	if logLevel != "" {

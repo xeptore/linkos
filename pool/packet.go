@@ -1,53 +1,37 @@
 package pool
 
 import (
-	"github.com/valyala/bytebufferpool"
+	"github.com/panjf2000/gnet/v2/pkg/pool/byteslice"
 )
 
 type Pool struct {
-	pool          *bytebufferpool.Pool
+	pool          *byteslice.Pool
 	PacketMaxSize int
 }
 
 func New(bufferSize int) Pool {
-	pool := new(bytebufferpool.Pool)
-	seed(pool, bufferSize)
+	pool := new(byteslice.Pool)
 	return Pool{
 		pool:          pool,
 		PacketMaxSize: bufferSize,
 	}
 }
 
-func seed(p *bytebufferpool.Pool, bufferSize int) {
-	var (
-		bufs  = make([]*bytebufferpool.ByteBuffer, 0, 100)
-		whole = make([]byte, 100*bufferSize)
-	)
-	for i := range 100 {
-		buf := p.Get()
-		buf.Set(whole[i*100 : (i+1)*100])
-		bufs = append(bufs, buf)
-	}
-	for i := range 100 {
-		p.Put(bufs[i])
-	}
-}
-
 type Packet struct {
-	Buf  *bytebufferpool.ByteBuffer
+	B    []byte
 	Size int
-	pool *bytebufferpool.Pool
+	pool *byteslice.Pool
 }
 
 func (b *Packet) ReturnToPool() {
-	b.Buf.Reset()
+	b.B = b.B[:0]
 	b.Size = 0
-	b.pool.Put(b.Buf)
+	b.pool.Put(b.B)
 }
 
-func (bp *Pool) AcquirePacket() *Packet {
+func (bp *Pool) AcquirePacket(size int) *Packet {
 	return &Packet{
-		Buf:  bp.pool.Get(),
+		B:    bp.pool.Get(size),
 		Size: 0,
 		pool: bp.pool,
 	}

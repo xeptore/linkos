@@ -160,15 +160,8 @@ func (s *Session) Reader(ctx context.Context) *SessionReader {
 					continue
 				}
 
-				clone := s.pool.AcquirePacket()
-				if written, err := clone.Buf.Write(packet); nil != err {
-					s.logger.
-						Error().
-						Err(err).
-						Int("packet_size", packetLen).
-						Msg("Failed to write TUN-received packet to buffer pool clone")
-					continue
-				} else if written != len(packet) {
+				clone := s.pool.AcquirePacket(packetLen)
+				if written := copy(clone.B, packet); written != len(packet) {
 					s.logger.
 						Error().
 						Err(err).

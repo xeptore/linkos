@@ -24,6 +24,7 @@ const (
 	DefaultClientTunDeviceMTU       = 1280
 	DefaultBufferSize               = 1280
 	DefaultServerMaxClients         = 10
+	DefaultServerNumEventLoops      = 512
 	DefaultServerCleanupIntervalSec = 5 * minute
 	DefaultKeepAliveIntervalSec     = 25
 	DefaultMissedKeepAliveThreshold = 3

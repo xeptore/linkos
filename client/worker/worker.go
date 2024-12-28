@@ -45,36 +45,9 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	}
 	logger = logger.With().Str("gateway_ip", gatewayIP.String()).Logger()
 
-	header := &ipv4.Header{ //nolint:exhaustruct
-		Version:  ipv4.Version,
-		Len:      ipv4.HeaderLen,
-		TOS:      0,
-		TotalLen: ipv4.HeaderLen,
-		ID:       0,
-		Flags:    0,
-		FragOff:  0,
-		TTL:      64,
-		Protocol: 0,
-		Checksum: 0,
-		Src:      w.srcIP,
-		Dst:      gatewayIP,
-	}
-
-	// Marshal the header into a byte slice
-	packet, err := header.Marshal()
+	packetBytes, err := newKeepAlivePacket(w.srcIP, gatewayIP)
 	if nil != err {
-		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to marshal keep-alive packet header before checksum calculation")
-		return
-	}
-
-	// Calculate the checksum (important for network transmission)
-	header.Checksum = 0 // Reset checksum before recalculation
-	header.Checksum = checksumIPv4(packet)
-
-	// Marshal the header again with the calculated checksum
-	packetBytes, err := header.Marshal()
-	if nil != err {
-		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to marshal keep-alive packet header after checksum calculation")
+		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to craft keep-alive packet")
 		return
 	}
 
@@ -96,6 +69,41 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 			}
 		}
 	}
+}
+
+// credit goes to https://devv.ai
+func newKeepAlivePacket(src, dst net.IP) ([]byte, error) {
+	header := &ipv4.Header{ //nolint:exhaustruct
+		Version:  ipv4.Version,
+		Len:      ipv4.HeaderLen,
+		TOS:      0,
+		TotalLen: ipv4.HeaderLen,
+		ID:       0,
+		Flags:    0,
+		FragOff:  0,
+		TTL:      64,
+		Protocol: 0,
+		Checksum: 0,
+		Src:      src,
+		Dst:      dst,
+	}
+
+	// Marshal the header into a byte slice
+	packet, err := header.Marshal()
+	if nil != err {
+		return nil, fmt.Errorf("failed to marshal keep-alive packet header before checksum calculation: %v", err)
+	}
+
+	// Calculate the checksum (important for network transmission)
+	header.Checksum = 0 // Reset checksum before recalculation
+	header.Checksum = checksumIPv4(packet)
+
+	// Marshal the header again with the calculated checksum
+	packetBytes, err := header.Marshal()
+	if nil != err {
+		return nil, fmt.Errorf("failed to marshal keep-alive packet header after checksum calculation: %v", err)
+	}
+	return packetBytes, nil
 }
 
 func writeKeepAlivePacket(logger zerolog.Logger, p []byte, conn *net.UDPConn) error {
