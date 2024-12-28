@@ -26,16 +26,17 @@ import (
 type (
 	Server struct {
 		gnet.BuiltinEventEngine
-		engine      gnet.Engine
-		bindHost    string
-		bindDev     string
-		bufferSize  int
-		broadcastIP net.IP
-		gatewayIP   net.IP
-		subnetIPNet *net.IPNet
-		tick        time.Duration
-		clients     []Client
-		logger      zerolog.Logger
+		engine        gnet.Engine
+		bindHost      string
+		bindDev       string
+		bufferSize    int
+		numEventLoops int
+		broadcastIP   net.IP
+		gatewayIP     net.IP
+		subnetIPNet   *net.IPNet
+		tick          time.Duration
+		clients       []Client
+		logger        zerolog.Logger
 	}
 	ClientPrivateIP  = string
 	LocalConnAddr    = string
@@ -48,8 +49,8 @@ type (
 	}
 )
 
-func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int) (*Server, error) {
-	ip, subnetIPNet, err := net.ParseCIDR(ipNet)
+func New(logger zerolog.Logger, cfg *config.Server) (*Server, error) {
+	ip, subnetIPNet, err := net.ParseCIDR(cfg.IPNet)
 	if nil != err {
 		return nil, fmt.Errorf("server: error parsing subnet CIDR: %v", err)
 	}
@@ -81,9 +82,10 @@ func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int)
 	server := &Server{
 		BuiltinEventEngine: gnet.BuiltinEventEngine{},
 		engine:             gnet.Engine{},
-		bindHost:           bindHost,
-		bindDev:            bindDev,
-		bufferSize:         bufferSize,
+		bindHost:           cfg.BindHost,
+		bindDev:            cfg.BindDev,
+		bufferSize:         cfg.BufferSize,
+		numEventLoops:      cfg.NumEventLoops,
 		broadcastIP:        broadcastIP,
 		gatewayIP:          gatewayIP,
 		subnetIPNet:        subnetIPNet,
@@ -120,7 +122,6 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 
 	opts := []gnet.Option{
-		gnet.WithMulticore(false),
 		gnet.WithLoadBalancing(gnet.RoundRobin),
 		gnet.WithReuseAddr(false),
 		gnet.WithReusePort(false),
@@ -134,6 +135,20 @@ func (s *Server) Run(ctx context.Context) error {
 		gnet.WithLogLevel(logging.PanicLevel),
 		gnet.WithLogger(logging.Logger(zap.NewNop().Sugar())),
 	}
+
+	if s.numEventLoops > 0 {
+		opts = append(
+			opts,
+			gnet.WithMulticore(true),
+			gnet.WithNumEventLoop(s.numEventLoops),
+		)
+	} else {
+		opts = append(
+			opts,
+			gnet.WithMulticore(false),
+		)
+	}
+
 	protoAddrs := lo.Map(
 		slices.Concat(config.DefaultClientRecvPorts, config.DefaultClientSendPorts),
 		func(port uint16, _ int) string {
