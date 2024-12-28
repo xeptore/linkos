@@ -27,7 +27,6 @@ func NewSend(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost str
 		common: common{
 			serverHost:      serverHost,
 			serverPort:      serverPort,
-			connID:          0,
 			writeBufferSize: bufferSize,
 			readBufferSize:  0, // Nothing is expected to be received on this socket
 			srcIP:           srcIP,
@@ -74,7 +73,7 @@ func (w *Send) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (w *Send) run(ctx context.Context, conn *Connection) error {
+func (w *Send) run(ctx context.Context, conn *net.UDPConn) error {
 	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -106,7 +105,7 @@ func (w *Send) run(ctx context.Context, conn *Connection) error {
 	return w.handleOutbound(conn)
 }
 
-func (w *Send) handleOutbound(conn *Connection) error {
+func (w *Send) handleOutbound(conn *net.UDPConn) error {
 	for packet := range w.sessionReader {
 		if err := sendAndReleasePacket(w.logger, conn, packet); nil != err {
 			return err
@@ -115,10 +114,10 @@ func (w *Send) handleOutbound(conn *Connection) error {
 	return nil
 }
 
-func sendAndReleasePacket(logger zerolog.Logger, conn *Connection, p *pool.Packet) error {
+func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Packet) error {
 	defer p.ReturnToPool()
 
-	payload := p.B[:p.Size+1] // +1 to include the connection ID
+	payload := p.B[:p.Size]
 	if ok, err := filterOutgoingPacket(logger, payload); nil != err {
 		logger.Debug().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to filter packet")
 		return nil
@@ -127,7 +126,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *Connection, p *pool.Packe
 		return nil
 	}
 
-	written, err := conn.Write(payload) // +1 to include the connection ID
+	written, err := conn.Write(payload)
 	switch {
 	case nil != err:
 		switch {
@@ -138,7 +137,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *Connection, p *pool.Packe
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error sending data to server")
 		}
 		return err
-	case written != p.Size+1:
+	case written != p.Size:
 		logger.Error().Int("written", written).Int("expected", p.Size+1).Msg("Failed to write all bytes of packet to tunnel connection")
 	default:
 		logger.Trace().Int("bytes", written).Msg("Outgoing packet has been written to tunnel connection")
@@ -146,7 +145,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *Connection, p *pool.Packe
 	return nil
 }
 
-func (w *Send) handleInbound(wg *sync.WaitGroup, conn *Connection) {
+func (w *Send) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
 	defer wg.Done()
 
 	logger := w.logger.With().Str("worker", "incoming").Logger()

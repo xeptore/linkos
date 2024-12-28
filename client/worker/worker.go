@@ -28,14 +28,13 @@ import (
 type common struct {
 	serverHost      string
 	serverPort      uint16
-	connID          byte
 	writeBufferSize int
 	readBufferSize  int
 	srcIP           net.IP
 	logger          zerolog.Logger
 }
 
-func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *Connection) {
+func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
 	defer wg.Done()
 	logger := w.logger.With().Str("worker", "keep_alive").Logger()
 
@@ -46,36 +45,9 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *Connec
 	}
 	logger = logger.With().Str("gateway_ip", gatewayIP.String()).Logger()
 
-	header := &ipv4.Header{ //nolint:exhaustruct
-		Version:  ipv4.Version,
-		Len:      ipv4.HeaderLen,
-		TOS:      0,
-		TotalLen: ipv4.HeaderLen,
-		ID:       0,
-		Flags:    0,
-		FragOff:  0,
-		TTL:      64,
-		Protocol: 0,
-		Checksum: 0,
-		Src:      w.srcIP,
-		Dst:      gatewayIP,
-	}
-
-	// Marshal the header into a byte slice
-	packet, err := header.Marshal()
+	packetBytes, err := newKeepAlivePacket(w.srcIP, gatewayIP)
 	if nil != err {
-		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to marshal keep-alive packet header before checksum calculation")
-		return
-	}
-
-	// Calculate the checksum (important for network transmission)
-	header.Checksum = 0 // Reset checksum before recalculation
-	header.Checksum = checksumIPv4(packet)
-
-	// Marshal the header again with the calculated checksum
-	packetBytes, err := header.Marshal()
-	if nil != err {
-		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to marshal keep-alive packet header after checksum calculation")
+		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to craft keep-alive packet")
 		return
 	}
 
@@ -99,25 +71,42 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *Connec
 	}
 }
 
-type Connection struct {
-	conn *net.UDPConn
-	id   byte
+// credit goes to https://devv.ai
+func newKeepAlivePacket(src, dst net.IP) ([]byte, error) {
+	header := &ipv4.Header{ //nolint:exhaustruct
+		Version:  ipv4.Version,
+		Len:      ipv4.HeaderLen,
+		TOS:      0,
+		TotalLen: ipv4.HeaderLen,
+		ID:       0,
+		Flags:    0,
+		FragOff:  0,
+		TTL:      64,
+		Protocol: 0,
+		Checksum: 0,
+		Src:      src,
+		Dst:      dst,
+	}
+
+	// Marshal the header into a byte slice
+	packet, err := header.Marshal()
+	if nil != err {
+		return nil, fmt.Errorf("failed to marshal keep-alive packet header before checksum calculation: %v", err)
+	}
+
+	// Calculate the checksum (important for network transmission)
+	header.Checksum = 0 // Reset checksum before recalculation
+	header.Checksum = checksumIPv4(packet)
+
+	// Marshal the header again with the calculated checksum
+	packetBytes, err := header.Marshal()
+	if nil != err {
+		return nil, fmt.Errorf("failed to marshal keep-alive packet header after checksum calculation: %v", err)
+	}
+	return packetBytes, nil
 }
 
-func (c *Connection) Write(p []byte) (int, error) {
-	p[len(p)-1] = c.id //nolint:staticcheck
-	return c.conn.Write(p)
-}
-
-func (c *Connection) Read(p []byte) (int, error) {
-	return c.conn.Read(p)
-}
-
-func (c *Connection) Close() error {
-	return c.conn.Close()
-}
-
-func writeKeepAlivePacket(logger zerolog.Logger, p []byte, conn *Connection) error {
+func writeKeepAlivePacket(logger zerolog.Logger, p []byte, conn *net.UDPConn) error {
 	logger.Trace().Msg("Sending keep-alive packet")
 	if written, err := conn.Write(p); nil != err {
 		if netutil.IsConnInterruptedError(err) {
@@ -204,7 +193,7 @@ func filterOutgoingPacket(logger zerolog.Logger, p []byte) (bool, error) {
 	return false, nil
 }
 
-func (w *common) connect(ctx context.Context) (*Connection, error) {
+func (w *common) connect(ctx context.Context) (*net.UDPConn, error) {
 	w.logger.Trace().Str("server_host", w.serverHost).Msg("Resolving server address")
 
 	var serverIP net.IP
@@ -247,8 +236,5 @@ func (w *common) connect(ctx context.Context) (*Connection, error) {
 		return nil, fmt.Errorf("worker: failed to set write buffer: %v", err)
 	}
 
-	return &Connection{
-		conn: conn,
-		id:   w.connID + 1,
-	}, nil
+	return conn, nil
 }

@@ -42,7 +42,7 @@ type (
 	Client           []*ClientConnection
 	ClientConnection struct {
 		Conn          io.WriteCloser
-		ConnID        byte
+		RemoteAddr    string
 		LastKeepAlive int64
 		IsIdle        bool
 	}
@@ -70,8 +70,8 @@ func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int)
 		clients[i] = client
 		for j := range len(config.DefaultClientRecvPorts) {
 			clients[i][j] = &ClientConnection{
-				Conn:          Discard,
-				ConnID:        0,
+				Conn:          discard,
+				RemoteAddr:    "",
 				LastKeepAlive: time.Now().Unix(),
 				IsIdle:        true,
 			}
@@ -292,7 +292,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		}
 	} else if idx := slices.Index(config.DefaultClientRecvPorts, localPort); idx != -1 {
 		storedClientConn := s.clients[clientIdx][idx]
-		if connID := packet[len(packet)-1]; storedClientConn.ConnID != connID || storedClientConn.IsIdle {
+		if remoteAddr := conn.RemoteAddr().String(); storedClientConn.RemoteAddr != remoteAddr || storedClientConn.IsIdle {
 			if err := conn.SetReadBuffer(s.bufferSize); nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
 			} else {
@@ -305,13 +305,14 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			}
 			newClientConn := &ClientConnection{
 				Conn:          conn,
-				ConnID:        connID,
+				RemoteAddr:    remoteAddr,
 				LastKeepAlive: time.Now().Unix(),
 				IsIdle:        false,
 			}
 			s.clients[clientIdx][idx] = newClientConn
+		} else {
+			storedClientConn.LastKeepAlive = time.Now().Unix()
 		}
-		storedClientConn.LastKeepAlive = time.Now().Unix()
 		return gnet.None
 	} else {
 		logger.Debug().Msg("Ignoring packet with invalid port")
