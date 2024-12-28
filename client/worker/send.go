@@ -27,6 +27,7 @@ func NewSend(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost str
 		common: common{
 			serverHost:      serverHost,
 			serverPort:      serverPort,
+			connID:          0,
 			writeBufferSize: bufferSize,
 			readBufferSize:  0, // Nothing is expected to be received on this socket
 			srcIP:           srcIP,
@@ -73,7 +74,7 @@ func (w *Send) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (w *Send) run(ctx context.Context, conn *net.UDPConn) error {
+func (w *Send) run(ctx context.Context, conn *Connection) error {
 	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -105,7 +106,7 @@ func (w *Send) run(ctx context.Context, conn *net.UDPConn) error {
 	return w.handleOutbound(conn)
 }
 
-func (w *Send) handleOutbound(conn *net.UDPConn) error {
+func (w *Send) handleOutbound(conn *Connection) error {
 	for packet := range w.sessionReader {
 		if err := sendAndReleasePacket(w.logger, conn, packet); nil != err {
 			return err
@@ -114,7 +115,7 @@ func (w *Send) handleOutbound(conn *net.UDPConn) error {
 	return nil
 }
 
-func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Packet) error {
+func sendAndReleasePacket(logger zerolog.Logger, conn *Connection, p *pool.Packet) error {
 	defer p.ReturnToPool()
 
 	payload := p.B
@@ -146,7 +147,7 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 	return nil
 }
 
-func (w *Send) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
+func (w *Send) handleInbound(wg *sync.WaitGroup, conn *Connection) {
 	defer wg.Done()
 
 	logger := w.logger.With().Str("worker", "incoming").Logger()
