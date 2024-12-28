@@ -28,13 +28,14 @@ import (
 type common struct {
 	serverHost      string
 	serverPort      uint16
+	connID          byte
 	writeBufferSize int
 	readBufferSize  int
 	srcIP           net.IP
 	logger          zerolog.Logger
 }
 
-func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
+func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *Connection) {
 	defer wg.Done()
 	logger := w.logger.With().Str("worker", "keep_alive").Logger()
 
@@ -98,7 +99,25 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 	}
 }
 
-func writeKeepAlivePacket(logger zerolog.Logger, p []byte, conn *net.UDPConn) error {
+type Connection struct {
+	conn *net.UDPConn
+	id   byte
+}
+
+func (c *Connection) Write(p []byte) (int, error) {
+	p[len(p)-1] = c.id //nolint:staticcheck
+	return c.conn.Write(p)
+}
+
+func (c *Connection) Read(p []byte) (int, error) {
+	return c.conn.Read(p)
+}
+
+func (c *Connection) Close() error {
+	return c.conn.Close()
+}
+
+func writeKeepAlivePacket(logger zerolog.Logger, p []byte, conn *Connection) error {
 	logger.Trace().Msg("Sending keep-alive packet")
 	if written, err := conn.Write(p); nil != err {
 		if netutil.IsConnInterruptedError(err) {
@@ -185,7 +204,7 @@ func filterOutgoingPacket(logger zerolog.Logger, p []byte) (bool, error) {
 	return false, nil
 }
 
-func (w *common) connect(ctx context.Context) (*net.UDPConn, error) {
+func (w *common) connect(ctx context.Context) (*Connection, error) {
 	w.logger.Trace().Str("server_host", w.serverHost).Msg("Resolving server address")
 
 	var serverIP net.IP
@@ -228,5 +247,8 @@ func (w *common) connect(ctx context.Context) (*net.UDPConn, error) {
 		return nil, fmt.Errorf("worker: failed to set write buffer: %v", err)
 	}
 
-	return conn, nil
+	return &Connection{
+		conn: conn,
+		id:   w.connID + 1,
+	}, nil
 }

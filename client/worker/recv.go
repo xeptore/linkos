@@ -26,7 +26,8 @@ func NewRecv(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost str
 		common: common{
 			serverHost:      serverHost,
 			serverPort:      serverPort,
-			writeBufferSize: 128, // For the keep-alive packet
+			connID:          0,
+			writeBufferSize: 128, // For keep-alive packets
 			readBufferSize:  bufferSize,
 			srcIP:           srcIP,
 			logger:          logger,
@@ -71,7 +72,7 @@ func (w *Recv) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
+func (w *Recv) run(ctx context.Context, conn *Connection) error {
 	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -100,7 +101,7 @@ func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
 	return w.handleInbound(conn)
 }
 
-func (w *Recv) handleInbound(conn *net.UDPConn) error {
+func (w *Recv) handleInbound(conn *Connection) error {
 	var (
 		logger = w.logger.With().Str("worker", "incoming").Logger()
 		buffer = make([]byte, w.readBufferSize)
@@ -115,6 +116,7 @@ func (w *Recv) handleInbound(conn *net.UDPConn) error {
 			}
 			return err
 		}
+		n-- // Ignore the last byte which is the connection ID
 		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
 
 		written, err := w.session.Write(buffer[:n])

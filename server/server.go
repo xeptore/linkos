@@ -42,7 +42,7 @@ type (
 	Client           []*ClientConnection
 	ClientConnection struct {
 		Conn          io.WriteCloser
-		ConnFd        int
+		ConnID        byte
 		LastKeepAlive int64
 		IsIdle        bool
 	}
@@ -71,7 +71,7 @@ func New(logger zerolog.Logger, ipNet, bindHost, bindDev string, bufferSize int)
 		for j := range len(config.DefaultClientRecvPorts) {
 			clients[i][j] = &ClientConnection{
 				Conn:          Discard,
-				ConnFd:        0,
+				ConnID:        0,
 				LastKeepAlive: time.Now().Unix(),
 				IsIdle:        true,
 			}
@@ -291,8 +291,8 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			return gnet.None
 		}
 	} else if idx := slices.Index(config.DefaultClientRecvPorts, localPort); idx != -1 {
-		clientConn := s.clients[clientIdx][idx]
-		if connFd := conn.Fd(); clientConn.ConnFd != connFd || clientConn.IsIdle {
+		storedClientConn := s.clients[clientIdx][idx]
+		if connID := packet[len(packet)-1]; storedClientConn.ConnID != connID || storedClientConn.IsIdle {
 			if err := conn.SetReadBuffer(s.bufferSize); nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
 			} else {
@@ -303,15 +303,15 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			} else {
 				logger.Debug().Msg("Set connection write buffer size")
 			}
-			clientConn = &ClientConnection{
+			newClientConn := &ClientConnection{
 				Conn:          conn,
-				ConnFd:        connFd,
+				ConnID:        connID,
 				LastKeepAlive: time.Now().Unix(),
 				IsIdle:        false,
 			}
-			s.clients[clientIdx][idx] = clientConn
+			s.clients[clientIdx][idx] = newClientConn
 		}
-		clientConn.LastKeepAlive = time.Now().Unix()
+		storedClientConn.LastKeepAlive = time.Now().Unix()
 		return gnet.None
 	} else {
 		logger.Debug().Msg("Ignoring packet with invalid port")
