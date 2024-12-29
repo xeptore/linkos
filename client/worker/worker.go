@@ -51,7 +51,7 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 		return
 	}
 
-	tick := time.Tick(config.DefaultKeepAliveIntervalSec * time.Second)
+	tick := time.Tick(config.DefaultKeepAliveSec * time.Second)
 	initialTick := time.After(1 * time.Second)
 
 	for {
