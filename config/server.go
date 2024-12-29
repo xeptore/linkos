@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alecthomas/units"
 	"github.com/rs/zerolog"
 	"gopkg.in/ini.v1"
 )
@@ -24,6 +25,8 @@ type Server struct {
 	BindDev       string
 	IPNet         string
 	NumEventLoops int
+	RecvBuffer    int64
+	SendBuffer    int64
 	BufferSize    int
 	LogLevel      zerolog.Level
 }
@@ -35,6 +38,8 @@ func (s *Server) LogDict() *zerolog.Event {
 		Str("bind_dev", s.BindDev).
 		Str("ip_net", s.IPNet).
 		Int("num_event_loops", s.NumEventLoops).
+		Int64("recv_buffer", s.RecvBuffer).
+		Int64("send_buffer", s.SendBuffer).
 		Int("buffer_size", s.BufferSize).
 		Str("log_level", s.LogLevel.String())
 }
@@ -81,11 +86,31 @@ func LoadServer(filename string) (*Server, error) {
 		}
 	}
 
+	var recvBuffer int64 = DefaultServerRecvBufferSize
+	if recvBufferStr := strings.TrimSpace(cfg.Section("").Key("recv_buffer").String()); len(recvBufferStr) != 0 {
+		if b, err := units.ParseStrictBytes(recvBufferStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for recv_buffer configuration option, expected byte unit", recvBufferStr)
+		} else {
+			recvBuffer = b
+		}
+	}
+
+	var sendBuffer int64 = DefaultServerSendBufferSize
+	if sendBufferStr := strings.TrimSpace(cfg.Section("").Key("send_buffer").String()); len(sendBufferStr) != 0 {
+		if b, err := units.ParseStrictBytes(sendBufferStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for send_buffer configuration option, expected byte unit", sendBufferStr)
+		} else {
+			sendBuffer = b
+		}
+	}
+
 	out := Server{
 		BindHost:      bindHost,
 		BindDev:       bindDev,
 		IPNet:         ipNet,
 		NumEventLoops: numEventLoops,
+		RecvBuffer:    recvBuffer,
+		SendBuffer:    sendBuffer,
 		BufferSize:    bufferSize,
 		LogLevel:      DefaultServerLogLevel,
 	}

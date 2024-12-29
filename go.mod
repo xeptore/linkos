@@ -3,6 +3,7 @@ module github.com/xeptore/linkos
 go 1.23.4
 
 require (
+	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b
 	github.com/google/go-github/v67 v67.0.0
 	github.com/google/gopacket v1.1.19
 	github.com/miekg/dns v1.1.62
