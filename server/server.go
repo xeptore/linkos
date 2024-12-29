@@ -269,19 +269,20 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 					}
 					logger = logger.With().Int("dst_local_port", dstPortIdx).Logger()
 					logger.Debug().Msg("Forwarding broadcast packet to client")
-					err := retry.Do(func(attempt int) (retry.Action, error) {
+					err := retry.Do(func(attempt int) retry.Action {
 						if written, err := dstConn.Conn.Write(packet); nil != err {
 							if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
 								if attempt > 3 {
-									return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
+									return retry.Fail(fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt))
 								}
-								return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
+								time.Sleep(time.Duration(attempt) * 65 * time.Millisecond)
+								return retry.Retry()
 							}
-							return retry.Abort, err
+							return retry.Fail(err)
 						} else if written != len(packet) {
-							return retry.Abort, fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written)
+							return retry.Fail(fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written))
 						}
-						return retry.Abort, nil
+						return retry.Success()
 					})
 					if nil != err {
 						logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
@@ -311,19 +312,20 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				}
 				logger = logger.With().Int("dst_local_port_idx", dstLocalPortIdx).Logger()
 				logger.Debug().Msg("Forwarding packet to client")
-				err := retry.Do(func(attempt int) (retry.Action, error) {
+				err := retry.Do(func(attempt int) retry.Action {
 					if written, err := dstConn.Conn.Write(packet); nil != err {
 						if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
 							if attempt > 3 {
-								return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
+								return retry.Fail(fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt))
 							}
-							return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
+							time.Sleep(time.Duration(attempt) * 65 * time.Millisecond)
+							return retry.Retry()
 						}
-						return retry.Abort, err
+						return retry.Fail(err)
 					} else if written != len(packet) {
-						return retry.Abort, fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written)
+						return retry.Fail(fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written))
 					}
-					return retry.Abort, nil
+					return retry.Success()
 				})
 				if nil != err {
 					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
