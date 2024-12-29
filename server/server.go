@@ -127,8 +127,8 @@ func (s *Server) Run(ctx context.Context) error {
 		gnet.WithWriteBufferCap(s.cfg.BufferSize),
 		gnet.WithLockOSThread(false),
 		gnet.WithTicker(true),
-		gnet.WithSocketRecvBuffer(int(s.cfg.SendBuffer)),
-		gnet.WithSocketSendBuffer(int(s.cfg.RecvBuffer)),
+		gnet.WithSocketRecvBuffer(int(s.cfg.SocketSendBuffer)),
+		gnet.WithSocketSendBuffer(int(s.cfg.SocketRecvBuffer)),
 		gnet.WithLogLevel(logging.PanicLevel),
 		gnet.WithLogger(logging.Logger(zap.NewNop().Sugar())),
 	}
