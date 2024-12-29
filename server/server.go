@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net"
 	"net/netip"
 	"slices"
@@ -23,6 +22,7 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/mathutil"
 	"github.com/xeptore/linkos/retry"
 )
 
@@ -259,7 +259,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 					continue
 				}
 				logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-				sign := 2*rand.IntN(2) - 1
+				sign := mathutil.RandomSign()
 				for i := range len(config.DefaultClientRecvPorts) {
 					dstPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
 					dstConn := dstClient[dstPortIdx]
@@ -301,7 +301,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			}
 			logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
 			dstClient := s.clients[dstClientIdx]
-			sign := 2*rand.IntN(2) - 1
+			sign := mathutil.RandomSign()
 			for i := range len(config.DefaultClientRecvPorts) {
 				dstLocalPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
 				dstConn := dstClient[dstLocalPortIdx]
