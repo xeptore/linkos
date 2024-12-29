@@ -19,11 +19,10 @@ import (
 )
 
 type Client struct {
-	t          *tun.Tun
-	serverHost string
-	ip         net.IP
-	bufferSize int
-	logger     zerolog.Logger
+	t      *tun.Tun
+	cfg    *config.Client
+	ip     net.IP
+	logger zerolog.Logger
 }
 
 func (c *Client) run(ctx context.Context) error {
@@ -32,7 +31,7 @@ func (c *Client) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	session, err := c.t.StartSession(pool.New(c.bufferSize))
+	session, err := c.t.StartSession(pool.New(c.cfg.BufferSize))
 	if nil != err {
 		return fmt.Errorf("client: failed to start session: %v", err)
 	}
@@ -62,9 +61,8 @@ func (c *Client) run(ctx context.Context) error {
 	for idx, port := range config.DefaultClientRecvPorts {
 		w := worker.NewRecv(
 			c.logger.With().Str("kind", "recv").Int("worker_id", idx).Logger(),
-			c.bufferSize,
+			c.cfg,
 			c.ip,
-			c.serverHost,
 			port,
 			session,
 		)
@@ -75,9 +73,8 @@ func (c *Client) run(ctx context.Context) error {
 	for idx, port := range config.DefaultClientSendPorts {
 		w := worker.NewSend(
 			c.logger.With().Str("kind", "send").Int("worker_id", idx).Logger(),
-			c.bufferSize,
+			c.cfg,
 			c.ip,
-			c.serverHost,
 			port,
 			reader.Packets,
 		)

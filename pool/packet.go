@@ -9,11 +9,11 @@ type Pool struct {
 	PacketMaxSize int
 }
 
-func New(bufferSize int) Pool {
+func New(maxPacketSize int) Pool {
 	pool := new(byteslice.Pool)
 	return Pool{
 		pool:          pool,
-		PacketMaxSize: bufferSize,
+		PacketMaxSize: maxPacketSize,
 	}
 }
 

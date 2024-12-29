@@ -10,17 +10,20 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alecthomas/units"
 	"github.com/rs/zerolog"
 	"gopkg.in/ini.v1"
 )
 
 type Client struct {
-	ServerHost string
-	IP         string
-	RingSize   uint32
-	BufferSize int
-	MTU        uint32
-	LogLevel   zerolog.Level
+	ServerHost       string
+	IP               string
+	RingSize         uint32
+	BufferSize       int
+	SocketRecvBuffer int64
+	SocketSendBuffer int64
+	MTU              uint32
+	LogLevel         zerolog.Level
 }
 
 func (c *Client) LogDict() *zerolog.Event {
@@ -29,6 +32,8 @@ func (c *Client) LogDict() *zerolog.Event {
 		Str("server_host", c.ServerHost).
 		Str("ip", c.IP).
 		Int("buffer_size", c.BufferSize).
+		Int64("socket_send_buffer", c.SocketSendBuffer).
+		Int64("socket_recv_buffer", c.SocketRecvBuffer).
 		Uint32("mtu", c.MTU).
 		Uint32("ring_size", c.RingSize).
 		Str("log_level", c.LogLevel.String())
@@ -63,6 +68,24 @@ func LoadClient(filename string) (*Client, error) {
 		}
 	}
 
+	var sendBuffer int64 = DefaultClientSendBuffer
+	if socketSendBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_send_buffer").String()); len(socketSendBufferStr) != 0 {
+		if i, err := units.ParseStrictBytes(socketSendBufferStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for socket_send_buffer configuration option, expected byte size", socketSendBufferStr)
+		} else {
+			sendBuffer = i
+		}
+	}
+
+	var socketRecvBuffer int64 = DefaultClientSocketRecvBuffer
+	if socketRecvBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_recv_buffer").String()); len(socketRecvBufferStr) != 0 {
+		if i, err := units.ParseStrictBytes(socketRecvBufferStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for socket_recv_buffer configuration option, expected byte size", socketRecvBufferStr)
+		} else {
+			socketRecvBuffer = i
+		}
+	}
+
 	var mtu uint32 = DefaultClientTunDeviceMTU
 	if mtuStr := strings.TrimSpace(cfg.Section("").Key("mtu").String()); len(mtuStr) != 0 {
 		if i, err := strconv.ParseUint(mtuStr, 10, 32); nil != err {
@@ -77,12 +100,14 @@ func LoadClient(filename string) (*Client, error) {
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 
 	out := Client{
-		ServerHost: serverHost,
-		IP:         ip,
-		RingSize:   ringSizeExp,
-		BufferSize: bufferSize,
-		MTU:        mtu,
-		LogLevel:   DefaultClientLogLevel,
+		ServerHost:       serverHost,
+		IP:               ip,
+		RingSize:         ringSizeExp,
+		BufferSize:       bufferSize,
+		SocketRecvBuffer: socketRecvBuffer,
+		SocketSendBuffer: sendBuffer,
+		MTU:              mtu,
+		LogLevel:         DefaultClientLogLevel,
 	}
 
 	if logLevel != "" {

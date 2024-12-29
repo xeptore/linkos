@@ -181,11 +181,10 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	logger.Debug().Msg("Set adapter IPv4 options")
 
 	client := Client{
-		t:          t,
-		serverHost: cfg.ServerHost,
-		ip:         net.ParseIP(cfg.IP),
-		bufferSize: cfg.BufferSize,
-		logger:     logger.With().Str("module", "client").Logger(),
+		t:      t,
+		cfg:    cfg,
+		ip:     net.ParseIP(cfg.IP),
+		logger: logger.With().Str("module", "client").Logger(),
 	}
 
 	logger.WithLevel(log.Levelless).Msg("Starting VPN client")
