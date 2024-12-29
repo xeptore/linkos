@@ -23,15 +23,15 @@ const (
 	DefaultTunRingSize                  = 1
 	DefaultClientTunDeviceMTU           = 1280
 	DefaultBufferSize                   = 1280
-	DefaultClientSendBuffer             = 12 * kib
-	DefaultClientSocketRecvBuffer       = 12 * kib
+	DefaultClientSendBuffer             = 10 * kib
+	DefaultClientSocketRecvBuffer       = 10 * kib
 	DefaultServerMaxClients             = 10
 	DefaultServerNumEventLoops          = 512
 	DefaultServerCleanupTickIntervalSec = 5 * minute
 	DefaultKeepAliveSec                 = 25 * second
 	DefaultInactivityKeepAliveLimit     = 3
-	DefaultServerSocketSendBufferSize   = 48 * kib
-	DefaultServerSocketRecvBufferSize   = 48 * kib
+	DefaultServerSocketSendBufferSize   = 16 * kib
+	DefaultServerSocketRecvBufferSize   = 16 * kib
 )
 
 var (
