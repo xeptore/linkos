@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/netip"
 	"slices"
@@ -244,7 +245,9 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 
-	if idx := slices.Index(config.DefaultClientSendPorts, localPort); idx != -1 {
+	now := time.Now().Unix()
+
+	if localPortIdx := slices.Index(config.DefaultClientSendPorts, localPort); localPortIdx != -1 {
 		switch {
 		case dstIP.Equal(s.gatewayIP):
 			logger.Debug().Msg("Handled client keep-alive packet")
@@ -256,12 +259,15 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 					continue
 				}
 				logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-				for dstLocalPortIdx, dstConn := range dstClient {
+				sign := 2*rand.IntN(2) - 1
+				for i := range len(config.DefaultClientRecvPorts) {
+					dstPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
+					dstConn := dstClient[dstPortIdx]
 					if dstConn.IsIdle {
-						logger.Debug().Int("dst_local_port", dstLocalPortIdx).Msg("Skipping idle client connection")
+						logger.Debug().Int("dst_local_port", dstPortIdx).Msg("Skipping idle client connection")
 						continue
 					}
-					logger = logger.With().Int("dst_local_port", dstLocalPortIdx).Logger()
+					logger = logger.With().Int("dst_local_port", dstPortIdx).Logger()
 					logger.Debug().Msg("Forwarding broadcast packet to client")
 					err := retry.Do(func(attempt int) (retry.Action, error) {
 						if written, err := dstConn.Conn.Write(packet); nil != err {
@@ -295,7 +301,10 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			}
 			logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
 			dstClient := s.clients[dstClientIdx]
-			for dstLocalPortIdx, dstConn := range dstClient {
+			sign := 2*rand.IntN(2) - 1
+			for i := range len(config.DefaultClientRecvPorts) {
+				dstLocalPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
+				dstConn := dstClient[dstLocalPortIdx]
 				if dstConn.IsIdle {
 					logger.Debug().Int("dst_local_port_idx", dstLocalPortIdx).Msg("Skipping idle client connection")
 					continue
@@ -325,8 +334,8 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			}
 			return gnet.None
 		}
-	} else if idx := slices.Index(config.DefaultClientRecvPorts, localPort); idx != -1 {
-		storedClientConn := s.clients[clientIdx][idx]
+	} else if localPortIdx := slices.Index(config.DefaultClientRecvPorts, localPort); localPortIdx != -1 {
+		storedClientConn := s.clients[clientIdx][localPortIdx]
 		if remoteAddr := conn.RemoteAddr().String(); storedClientConn.RemoteAddr != remoteAddr || storedClientConn.IsIdle {
 			if err := conn.SetReadBuffer(s.cfg.BufferSize); nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
@@ -341,12 +350,12 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			newClientConn := &ClientConnection{
 				Conn:          conn,
 				RemoteAddr:    remoteAddr,
-				LastKeepAlive: time.Now().Unix(),
+				LastKeepAlive: now,
 				IsIdle:        false,
 			}
-			s.clients[clientIdx][idx] = newClientConn
+			s.clients[clientIdx][localPortIdx] = newClientConn
 		} else {
-			storedClientConn.LastKeepAlive = time.Now().Unix()
+			storedClientConn.LastKeepAlive = now
 		}
 		return gnet.None
 	} else {
