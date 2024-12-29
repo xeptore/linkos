@@ -28,8 +28,8 @@ const (
 	DefaultServerCleanupIntervalSec = 5 * minute
 	DefaultKeepAliveIntervalSec     = 25
 	DefaultMissedKeepAliveThreshold = 3
-	DefaultMaxKernelSendBufferSize  = 1 * mib
-	DefaultMaxKernelRecvBufferSize  = 1 * mib
+	DefaultServerSendBufferSize     = 512 * kib
+	DefaultServerRecvBufferSize     = 512 * kib
 )
 
 var (

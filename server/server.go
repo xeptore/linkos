@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/panjf2000/gnet/v2"
@@ -21,22 +22,21 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/mathutil"
+	"github.com/xeptore/linkos/retry"
 )
 
 type (
 	Server struct {
 		gnet.BuiltinEventEngine
-		engine        gnet.Engine
-		bindHost      string
-		bindDev       string
-		bufferSize    int
-		numEventLoops int
-		broadcastIP   net.IP
-		gatewayIP     net.IP
-		subnetIPNet   *net.IPNet
-		tick          time.Duration
-		clients       []Client
-		logger        zerolog.Logger
+		engine      gnet.Engine
+		cfg         *config.Server
+		broadcastIP net.IP
+		gatewayIP   net.IP
+		subnetIPNet *net.IPNet
+		tick        time.Duration
+		clients     []Client
+		logger      zerolog.Logger
 	}
 	ClientPrivateIP  = string
 	LocalConnAddr    = string
@@ -82,10 +82,7 @@ func New(logger zerolog.Logger, cfg *config.Server) (*Server, error) {
 	server := &Server{
 		BuiltinEventEngine: gnet.BuiltinEventEngine{},
 		engine:             gnet.Engine{},
-		bindHost:           cfg.BindHost,
-		bindDev:            cfg.BindDev,
-		bufferSize:         cfg.BufferSize,
-		numEventLoops:      cfg.NumEventLoops,
+		cfg:                cfg,
 		broadcastIP:        broadcastIP,
 		gatewayIP:          gatewayIP,
 		subnetIPNet:        subnetIPNet,
@@ -125,22 +122,22 @@ func (s *Server) Run(ctx context.Context) error {
 		gnet.WithLoadBalancing(gnet.RoundRobin),
 		gnet.WithReuseAddr(false),
 		gnet.WithReusePort(false),
-		gnet.WithBindToDevice(s.bindDev),
-		gnet.WithReadBufferCap(s.bufferSize),
-		gnet.WithWriteBufferCap(s.bufferSize),
+		gnet.WithBindToDevice(s.cfg.BindDev),
+		gnet.WithReadBufferCap(s.cfg.BufferSize),
+		gnet.WithWriteBufferCap(s.cfg.BufferSize),
 		gnet.WithLockOSThread(false),
 		gnet.WithTicker(true),
-		gnet.WithSocketRecvBuffer(config.DefaultMaxKernelRecvBufferSize),
-		gnet.WithSocketSendBuffer(config.DefaultMaxKernelSendBufferSize),
+		gnet.WithSocketRecvBuffer(int(s.cfg.SendBuffer)),
+		gnet.WithSocketSendBuffer(int(s.cfg.RecvBuffer)),
 		gnet.WithLogLevel(logging.PanicLevel),
 		gnet.WithLogger(logging.Logger(zap.NewNop().Sugar())),
 	}
 
-	if s.numEventLoops > 0 {
+	if s.cfg.NumEventLoops > 0 {
 		opts = append(
 			opts,
 			gnet.WithMulticore(true),
-			gnet.WithNumEventLoop(s.numEventLoops),
+			gnet.WithNumEventLoop(s.cfg.NumEventLoops),
 		)
 	} else {
 		opts = append(
@@ -152,7 +149,7 @@ func (s *Server) Run(ctx context.Context) error {
 	protoAddrs := lo.Map(
 		slices.Concat(config.DefaultClientRecvPorts, config.DefaultClientSendPorts),
 		func(port uint16, _ int) string {
-			return "udp4://" + net.JoinHostPort(s.bindHost, strconv.Itoa(int(port)))
+			return "udp4://" + net.JoinHostPort(s.cfg.BindHost, strconv.Itoa(int(port)))
 		},
 	)
 	s.logger.Debug().Strs("proto_addrs", protoAddrs).Msg("Starting engine")
@@ -248,7 +245,9 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 
-	if idx := slices.Index(config.DefaultClientSendPorts, localPort); idx != -1 {
+	now := time.Now().Unix()
+
+	if localPortIdx := slices.Index(config.DefaultClientSendPorts, localPort); localPortIdx != -1 {
 		switch {
 		case dstIP.Equal(s.gatewayIP):
 			logger.Debug().Msg("Handled client keep-alive packet")
@@ -260,17 +259,32 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 					continue
 				}
 				logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-				for dstLocalPortIdx, dstConn := range dstClient {
+				sign := mathutil.RandomSign()
+				for i := range len(config.DefaultClientRecvPorts) {
+					dstPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
+					dstConn := dstClient[dstPortIdx]
 					if dstConn.IsIdle {
-						logger.Debug().Int("dst_local_port", dstLocalPortIdx).Msg("Skipping idle client connection")
+						logger.Debug().Int("dst_local_port", dstPortIdx).Msg("Skipping idle client connection")
 						continue
 					}
-					logger = logger.With().Int("dst_local_port", dstLocalPortIdx).Logger()
+					logger = logger.With().Int("dst_local_port", dstPortIdx).Logger()
 					logger.Debug().Msg("Forwarding broadcast packet to client")
-					if written, err := dstConn.Conn.Write(packet); nil != err {
+					err := retry.Do(func(attempt int) (retry.Action, error) {
+						if written, err := dstConn.Conn.Write(packet); nil != err {
+							if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+								if attempt > 3 {
+									return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
+								}
+								return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
+							}
+							return retry.Abort, err
+						} else if written != len(packet) {
+							return retry.Abort, fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written)
+						}
+						return retry.Abort, nil
+					})
+					if nil != err {
 						logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
-					} else if written != len(packet) {
-						logger.Error().Int("written", written).Msg("Failed to write entire packet")
 					} else {
 						logger.Debug().Msg("Forwarded broadcast packet to client")
 					}
@@ -287,33 +301,47 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			}
 			logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
 			dstClient := s.clients[dstClientIdx]
-			for dstLocalPortIdx, dstConn := range dstClient {
+			sign := mathutil.RandomSign()
+			for i := range len(config.DefaultClientRecvPorts) {
+				dstLocalPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
+				dstConn := dstClient[dstLocalPortIdx]
 				if dstConn.IsIdle {
 					logger.Debug().Int("dst_local_port_idx", dstLocalPortIdx).Msg("Skipping idle client connection")
 					continue
 				}
 				logger = logger.With().Int("dst_local_port_idx", dstLocalPortIdx).Logger()
 				logger.Debug().Msg("Forwarding packet to client")
-				if written, err := dstConn.Conn.Write(packet); nil != err {
+				err := retry.Do(func(attempt int) (retry.Action, error) {
+					if written, err := dstConn.Conn.Write(packet); nil != err {
+						if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+							if attempt > 3 {
+								return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
+							}
+							return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
+						}
+						return retry.Abort, err
+					} else if written != len(packet) {
+						return retry.Abort, fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written)
+					}
+					return retry.Abort, nil
+				})
+				if nil != err {
 					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
-				} else if written != len(packet) {
-					logger.Error().Int("written", written).Msg("Failed to write entire packet")
 				} else {
-					logger.Debug().Msg("Forwarded packet to client")
+					logger.Debug().Msg("Forwarded broadcast packet to client")
 				}
 				break
 			}
 			return gnet.None
 		}
-	} else if idx := slices.Index(config.DefaultClientRecvPorts, localPort); idx != -1 {
-		storedClientConn := s.clients[clientIdx][idx]
-		if remoteAddr := conn.RemoteAddr().String(); storedClientConn.RemoteAddr != remoteAddr || storedClientConn.IsIdle {
-			if err := conn.SetReadBuffer(s.bufferSize); nil != err {
+	} else if localPortIdx := slices.Index(config.DefaultClientRecvPorts, localPort); localPortIdx != -1 {
+		if remoteAddr := conn.RemoteAddr().String(); s.clients[clientIdx][localPortIdx].RemoteAddr != remoteAddr || s.clients[clientIdx][localPortIdx].IsIdle {
+			if err := conn.SetReadBuffer(s.cfg.BufferSize); nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
 			} else {
 				logger.Debug().Msg("Set connection read buffer size")
 			}
-			if err := conn.SetWriteBuffer(s.bufferSize); nil != err {
+			if err := conn.SetWriteBuffer(s.cfg.BufferSize); nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set write buffer")
 			} else {
 				logger.Debug().Msg("Set connection write buffer size")
@@ -321,12 +349,12 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			newClientConn := &ClientConnection{
 				Conn:          conn,
 				RemoteAddr:    remoteAddr,
-				LastKeepAlive: time.Now().Unix(),
+				LastKeepAlive: now,
 				IsIdle:        false,
 			}
-			s.clients[clientIdx][idx] = newClientConn
+			s.clients[clientIdx][localPortIdx] = newClientConn
 		} else {
-			storedClientConn.LastKeepAlive = time.Now().Unix()
+			s.clients[clientIdx][localPortIdx].LastKeepAlive = now
 		}
 		return gnet.None
 	} else {
