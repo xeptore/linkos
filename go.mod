@@ -6,6 +6,7 @@ require (
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b
 	github.com/google/go-github/v67 v67.0.0
 	github.com/google/gopacket v1.1.19
+	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
 	github.com/miekg/dns v1.1.62
 	github.com/panjf2000/gnet/v2 v2.6.3
 	github.com/rs/zerolog v1.33.0
@@ -20,6 +21,7 @@ require (
 )
 
 require (
+	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

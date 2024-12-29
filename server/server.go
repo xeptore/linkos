@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/panjf2000/gnet/v2"
@@ -21,6 +22,7 @@ import (
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
+	"github.com/xeptore/linkos/retry"
 )
 
 type (
@@ -261,10 +263,22 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 					}
 					logger = logger.With().Int("dst_local_port", dstLocalPortIdx).Logger()
 					logger.Debug().Msg("Forwarding broadcast packet to client")
-					if written, err := dstConn.Conn.Write(packet); nil != err {
+					err := retry.Do(func(attempt int) (retry.Action, error) {
+						if written, err := dstConn.Conn.Write(packet); nil != err {
+							if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+								if attempt > 3 {
+									return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
+								}
+								return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
+							}
+							return retry.Abort, err
+						} else if written != len(packet) {
+							return retry.Abort, fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written)
+						}
+						return retry.Abort, nil
+					})
+					if nil != err {
 						logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
-					} else if written != len(packet) {
-						logger.Error().Int("written", written).Msg("Failed to write entire packet")
 					} else {
 						logger.Debug().Msg("Forwarded broadcast packet to client")
 					}
@@ -288,12 +302,24 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				}
 				logger = logger.With().Int("dst_local_port_idx", dstLocalPortIdx).Logger()
 				logger.Debug().Msg("Forwarding packet to client")
-				if written, err := dstConn.Conn.Write(packet); nil != err {
+				err := retry.Do(func(attempt int) (retry.Action, error) {
+					if written, err := dstConn.Conn.Write(packet); nil != err {
+						if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+							if attempt > 3 {
+								return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
+							}
+							return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
+						}
+						return retry.Abort, err
+					} else if written != len(packet) {
+						return retry.Abort, fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written)
+					}
+					return retry.Abort, nil
+				})
+				if nil != err {
 					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
-				} else if written != len(packet) {
-					logger.Error().Int("written", written).Msg("Failed to write entire packet")
 				} else {
-					logger.Debug().Msg("Forwarded packet to client")
+					logger.Debug().Msg("Forwarded broadcast packet to client")
 				}
 				break
 			}
