@@ -275,6 +275,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 								if attempt > 3 {
 									return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
 								}
+								time.Sleep(time.Duration(attempt) * 65 * time.Millisecond)
 								return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
 							}
 							return retry.Abort, err
@@ -317,6 +318,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 							if attempt > 3 {
 								return retry.Abort, fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt)
 							}
+							time.Sleep(time.Duration(attempt) * 65 * time.Millisecond)
 							return retry.Retry, errors.New("server: failed to write packet as buffer is temporarily unavailable")
 						}
 						return retry.Abort, err
