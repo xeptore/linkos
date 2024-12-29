@@ -23,6 +23,8 @@ const (
 	DefaultTunRingSize              = 1
 	DefaultClientTunDeviceMTU       = 1280
 	DefaultBufferSize               = 1280
+	DefaultClientSendBuffer         = 12 * kib
+	DefaultClientSocketRecvBuffer   = 12 * kib
 	DefaultServerMaxClients         = 10
 	DefaultServerNumEventLoops      = 512
 	DefaultServerCleanupIntervalSec = 5 * minute

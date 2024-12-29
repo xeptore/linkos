@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/netutil"
 	"github.com/xeptore/linkos/pool"
@@ -21,16 +22,16 @@ type Send struct {
 	sessionReader <-chan *pool.Packet
 }
 
-func NewSend(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost string, serverPort uint16, sessionReader <-chan *pool.Packet) *Send {
+func NewSend(logger zerolog.Logger, cfg *config.Client, srcIP net.IP, serverPort uint16, sessionReader <-chan *pool.Packet) *Send {
 	return &Send{
 		sessionReader: sessionReader,
 		common: common{
-			serverHost:      serverHost,
-			serverPort:      serverPort,
-			writeBufferSize: bufferSize,
-			readBufferSize:  0, // Nothing is expected to be received on this socket
-			srcIP:           srcIP,
-			logger:          logger,
+			serverHost:       cfg.ServerHost,
+			serverPort:       serverPort,
+			socketSendBuffer: int(cfg.SocketSendBuffer),
+			socketRecvBuffer: 0, // Nothing is expected to be received on this socket
+			srcIP:            srcIP,
+			logger:           logger,
 		},
 	}
 }

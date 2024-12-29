@@ -12,24 +12,27 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
 )
 
 type Recv struct {
 	common
-	session io.Writer
+	bufferSize int
+	session    io.Writer
 }
 
-func NewRecv(logger zerolog.Logger, bufferSize int, srcIP net.IP, serverHost string, serverPort uint16, session io.Writer) *Recv {
+func NewRecv(logger zerolog.Logger, cfg *config.Client, srcIP net.IP, serverPort uint16, session io.Writer) *Recv {
 	return &Recv{
-		session: session,
+		session:    session,
+		bufferSize: cfg.BufferSize,
 		common: common{
-			serverHost:      serverHost,
-			serverPort:      serverPort,
-			writeBufferSize: 128, // For keep-alive packets
-			readBufferSize:  bufferSize,
-			srcIP:           srcIP,
-			logger:          logger,
+			serverHost:       cfg.ServerHost,
+			serverPort:       serverPort,
+			socketSendBuffer: 128, // For keep-alive packets
+			socketRecvBuffer: int(cfg.SocketRecvBuffer),
+			srcIP:            srcIP,
+			logger:           logger,
 		},
 	}
 }
@@ -103,7 +106,7 @@ func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
 func (w *Recv) handleInbound(conn *net.UDPConn) error {
 	var (
 		logger = w.logger.With().Str("worker", "incoming").Logger()
-		buffer = make([]byte, w.readBufferSize)
+		buffer = make([]byte, w.bufferSize)
 	)
 	for {
 		n, err := conn.Read(buffer)

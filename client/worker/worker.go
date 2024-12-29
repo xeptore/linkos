@@ -26,12 +26,12 @@ import (
 )
 
 type common struct {
-	serverHost      string
-	serverPort      uint16
-	writeBufferSize int
-	readBufferSize  int
-	srcIP           net.IP
-	logger          zerolog.Logger
+	serverHost       string
+	serverPort       uint16
+	socketSendBuffer int
+	socketRecvBuffer int
+	srcIP            net.IP
+	logger           zerolog.Logger
 }
 
 func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
@@ -229,11 +229,11 @@ func (w *common) connect(ctx context.Context) (*net.UDPConn, error) {
 		return nil, fmt.Errorf("worker: failed to connect to server: %v", err)
 	}
 
-	if err := conn.SetReadBuffer(w.readBufferSize); nil != err {
-		return nil, fmt.Errorf("worker: failed to set read buffer: %v", err)
+	if err := conn.SetReadBuffer(w.socketRecvBuffer); nil != err {
+		return nil, fmt.Errorf("worker: failed to set socket recv buffer: %v", err)
 	}
-	if err := conn.SetWriteBuffer(w.writeBufferSize); nil != err {
-		return nil, fmt.Errorf("worker: failed to set write buffer: %v", err)
+	if err := conn.SetWriteBuffer(w.socketSendBuffer); nil != err {
+		return nil, fmt.Errorf("worker: failed to set socket send buffer: %v", err)
 	}
 
 	return conn, nil
