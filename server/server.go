@@ -86,7 +86,7 @@ func New(logger zerolog.Logger, cfg *config.Server) (*Server, error) {
 		broadcastIP:        broadcastIP,
 		gatewayIP:          gatewayIP,
 		subnetIPNet:        subnetIPNet,
-		tick:               config.DefaultServerCleanupIntervalSec * time.Second,
+		tick:               config.DefaultServerCleanupTickIntervalSec * time.Second,
 		clients:            clients,
 		logger:             logger,
 	}
@@ -180,7 +180,7 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 	now := time.Now().Unix()
 	for clientIdx, clientConn := range s.clients {
 		for portIdx, conn := range clientConn {
-			if now-conn.LastKeepAlive > config.DefaultKeepAliveIntervalSec*config.DefaultMissedKeepAliveThreshold && !conn.IsIdle {
+			if now-conn.LastKeepAlive > config.DefaultKeepAliveSec*config.DefaultInactivityKeepAliveLimit && !conn.IsIdle {
 				conn.IsIdle = true
 				logger := s.logger.With().Int("client_idx", clientIdx).Int("port_idx", portIdx).Logger()
 				logger.Warn().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
@@ -338,23 +338,12 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		}
 	} else if localPortIdx := slices.Index(config.DefaultClientRecvPorts, localPort); localPortIdx != -1 {
 		if remoteAddr := conn.RemoteAddr().String(); s.clients[clientIdx][localPortIdx].RemoteAddr != remoteAddr || s.clients[clientIdx][localPortIdx].IsIdle {
-			if err := conn.SetReadBuffer(s.cfg.BufferSize); nil != err {
-				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
-			} else {
-				logger.Debug().Msg("Set connection read buffer size")
-			}
-			if err := conn.SetWriteBuffer(s.cfg.BufferSize); nil != err {
-				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set write buffer")
-			} else {
-				logger.Debug().Msg("Set connection write buffer size")
-			}
-			newClientConn := &ClientConnection{
+			s.clients[clientIdx][localPortIdx] = &ClientConnection{
 				Conn:          conn,
 				RemoteAddr:    remoteAddr,
 				LastKeepAlive: now,
 				IsIdle:        false,
 			}
-			s.clients[clientIdx][localPortIdx] = newClientConn
 		} else {
 			s.clients[clientIdx][localPortIdx].LastKeepAlive = now
 		}
