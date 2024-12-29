@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -44,7 +45,7 @@ func getLatestRelease(ctx context.Context, client *github.Client) (*github.Repos
 			return nil, err
 		}
 		if len(releases) == 0 {
-			return nil, fmt.Errorf("update: no releases found")
+			return nil, errors.New("update: no releases found")
 		}
 		for _, rls := range releases {
 			if !rls.GetPrerelease() {
