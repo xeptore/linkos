@@ -18,20 +18,20 @@ const (
 )
 
 const (
-	DefaultServerLogLevel           = zerolog.InfoLevel
-	DefaultClientLogLevel           = zerolog.InfoLevel
-	DefaultTunRingSize              = 1
-	DefaultClientTunDeviceMTU       = 1280
-	DefaultBufferSize               = 1280
-	DefaultClientSendBuffer         = 12 * kib
-	DefaultClientSocketRecvBuffer   = 12 * kib
-	DefaultServerMaxClients         = 10
-	DefaultServerNumEventLoops      = 512
-	DefaultServerCleanupIntervalSec = 5 * minute
-	DefaultKeepAliveIntervalSec     = 25
-	DefaultMissedKeepAliveThreshold = 3
-	DefaultServerSendBufferSize     = 48 * kib
-	DefaultServerRecvBufferSize     = 48 * kib
+	DefaultServerLogLevel               = zerolog.InfoLevel
+	DefaultClientLogLevel               = zerolog.InfoLevel
+	DefaultTunRingSize                  = 1
+	DefaultClientTunDeviceMTU           = 1280
+	DefaultBufferSize                   = 1280
+	DefaultClientSendBuffer             = 12 * kib
+	DefaultClientSocketRecvBuffer       = 12 * kib
+	DefaultServerMaxClients             = 10
+	DefaultServerNumEventLoops          = 512
+	DefaultServerCleanupTickIntervalSec = 5 * minute
+	DefaultKeepAliveSec                 = 25 * second
+	DefaultInactivityKeepAliveLimit     = 3
+	DefaultServerSocketSendBufferSize   = 48 * kib
+	DefaultServerSocketRecvBufferSize   = 48 * kib
 )
 
 var (

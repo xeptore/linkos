@@ -86,21 +86,21 @@ func LoadServer(filename string) (*Server, error) {
 		}
 	}
 
-	var recvBuffer int64 = DefaultServerRecvBufferSize
-	if recvBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_recv_buffer").String()); len(recvBufferStr) != 0 {
-		if b, err := units.ParseStrictBytes(recvBufferStr); nil != err {
-			return nil, fmt.Errorf("config: invalid value of %q for socket_recv_buffer configuration option, expected byte unit", recvBufferStr)
+	var socketRecvBuffer int64 = DefaultServerSocketRecvBufferSize
+	if socketRecvBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_recv_buffer").String()); len(socketRecvBufferStr) != 0 {
+		if b, err := units.ParseStrictBytes(socketRecvBufferStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for socket_recv_buffer configuration option, expected byte unit", socketRecvBufferStr)
 		} else {
-			recvBuffer = b
+			socketRecvBuffer = b
 		}
 	}
 
-	var sendBuffer int64 = DefaultServerSendBufferSize
-	if sendBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_send_buffer").String()); len(sendBufferStr) != 0 {
-		if b, err := units.ParseStrictBytes(sendBufferStr); nil != err {
-			return nil, fmt.Errorf("config: invalid value of %q for socket_send_buffer configuration option, expected byte unit", sendBufferStr)
+	var socketSendBuffer int64 = DefaultServerSocketSendBufferSize
+	if socketSendBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_send_buffer").String()); len(socketSendBufferStr) != 0 {
+		if b, err := units.ParseStrictBytes(socketSendBufferStr); nil != err {
+			return nil, fmt.Errorf("config: invalid value of %q for socket_send_buffer configuration option, expected byte unit", socketSendBufferStr)
 		} else {
-			sendBuffer = b
+			socketSendBuffer = b
 		}
 	}
 
@@ -109,8 +109,8 @@ func LoadServer(filename string) (*Server, error) {
 		BindDev:          bindDev,
 		IPNet:            ipNet,
 		NumEventLoops:    numEventLoops,
-		SocketRecvBuffer: recvBuffer,
-		SocketSendBuffer: sendBuffer,
+		SocketRecvBuffer: socketRecvBuffer,
+		SocketSendBuffer: socketSendBuffer,
 		BufferSize:       bufferSize,
 		LogLevel:         DefaultServerLogLevel,
 	}
