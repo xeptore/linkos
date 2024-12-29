@@ -338,17 +338,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		}
 	} else if localPortIdx := slices.Index(config.DefaultClientRecvPorts, localPort); localPortIdx != -1 {
 		if remoteAddr := conn.RemoteAddr().String(); s.clients[clientIdx][localPortIdx].RemoteAddr != remoteAddr || s.clients[clientIdx][localPortIdx].IsIdle {
-			if err := conn.SetReadBuffer(s.cfg.BufferSize); nil != err {
-				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set read buffer")
-			} else {
-				logger.Debug().Msg("Set connection read buffer size")
-			}
-			if err := conn.SetWriteBuffer(s.cfg.BufferSize); nil != err {
-				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to set write buffer")
-			} else {
-				logger.Debug().Msg("Set connection write buffer size")
-			}
-			newClientConn := &ClientConnection{
+			s.clients[clientIdx][localPortIdx] = &ClientConnection{
 				Conn:          conn,
 				RemoteAddr:    remoteAddr,
 				LastKeepAlive: now,
