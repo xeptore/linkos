@@ -111,7 +111,7 @@ func (s *Server) Run(ctx context.Context) error {
 		for clientIdx, clientConn := range s.clients {
 			for portIdx, conn := range clientConn {
 				if err := conn.Conn.Close(); nil != err {
-					s.logger.Error().Err(err).Int("port_idx", portIdx).Int("client_idx", clientIdx).Msg("Failed to close client connection")
+					s.logger.Error().Func(errutil.TreeLog(err)).Err(err).Int("port_idx", portIdx).Int("client_idx", clientIdx).Msg("Failed to close client connection")
 				}
 			}
 		}
@@ -158,7 +158,7 @@ func (s *Server) Run(ctx context.Context) error {
 			s.logger.Debug().Msg("Server engine stopped due to context error")
 			return err
 		}
-		s.logger.Error().Err(err).Msg("Server engine stopped due to unknown error")
+		s.logger.Error().Func(errutil.TreeLog(err)).Err(err).Msg("Server engine stopped due to unknown error")
 	}
 
 	cancel()
@@ -185,7 +185,7 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 				logger := s.logger.With().Int("client_idx", clientIdx).Int("port_idx", portIdx).Logger()
 				logger.Warn().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
 				if err := conn.Conn.Close(); nil != err {
-					logger.Error().Err(err).Msg("Failed to close stale client connection")
+					logger.Error().Func(errutil.TreeLog(err)).Err(err).Msg("Failed to close stale client connection")
 				} else {
 					logger.Debug().Msg("Closed stale client connection")
 				}

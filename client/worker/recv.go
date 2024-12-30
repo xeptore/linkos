@@ -22,7 +22,7 @@ type Recv struct {
 	session    io.Writer
 }
 
-func NewRecv(logger zerolog.Logger, cfg *config.Client, srcIP net.IP, serverPort uint16, session io.Writer) *Recv {
+func NewRecv(logger zerolog.Logger, cfg *config.Client, serverPort uint16, session io.Writer) *Recv {
 	return &Recv{
 		session:    session,
 		bufferSize: cfg.BufferSize,
@@ -31,46 +31,31 @@ func NewRecv(logger zerolog.Logger, cfg *config.Client, srcIP net.IP, serverPort
 			serverPort:       serverPort,
 			socketSendBuffer: 128, // For keep-alive packets
 			socketRecvBuffer: int(cfg.SocketRecvBuffer),
-			srcIP:            srcIP,
+			srcIP:            cfg.IP,
 			logger:           logger,
 		},
 	}
 }
 
-func (w *Recv) Run(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (w *Recv) Run(ctx context.Context) error {
 	var connectFailedAttempts int
 	for {
-		select {
-		case <-ctx.Done():
-			w.logger.Debug().Msg("Finishing client loop as parent context was cancelled")
-			return
-		default:
-			conn, err := w.connect(ctx)
-			if nil != err {
-				if errors.Is(err, ctx.Err()) {
-					w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
-					return
-				}
-				connectFailedAttempts++
-				retryDelaySec := 2 * connectFailedAttempts
-				w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
-				time.Sleep(time.Duration(retryDelaySec) * time.Second)
-				continue
-			} else {
-				w.logger.Info().Msg("Connected to server")
-				connectFailedAttempts = 0
+		conn, err := w.connect(ctx)
+		if nil != err {
+			if errors.Is(err, ctx.Err()) {
+				w.logger.Debug().Msg("Finishing client loop as connecting to server was cancelled")
+				return ctx.Err()
 			}
-
-			if err := w.run(ctx, conn); nil != err {
-				// Pipe is broken due to issues with conn or context cancellation
-				if err := ctx.Err(); nil != err {
-					return
-				}
-				continue
-			}
+			connectFailedAttempts++
+			retryDelaySec := 2 * connectFailedAttempts
+			w.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msgf("Failed to connect to server. Reconnecting in %d seconds", retryDelaySec)
+			time.Sleep(time.Duration(retryDelaySec) * time.Second)
+			continue
+		} else {
+			w.logger.Info().Msg("Connected to server")
 		}
+
+		return w.run(ctx, conn)
 	}
 }
 
@@ -86,11 +71,12 @@ func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
 	wg.Add(1)
 	go func() { // Close connection on context cancellation
 		defer wg.Done()
+
 		<-ctx.Done()
 		w.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
 		if err := conn.Close(); nil != err {
 			if !errors.Is(err, net.ErrClosed) {
-				w.logger.Error().Err(err).Msg("Failed to close tunnel connection triggered by parent context closure")
+				w.logger.Error().Func(errutil.TreeLog(err)).Err(err).Msg("Failed to close tunnel connection triggered by parent context closure")
 			}
 		} else {
 			w.logger.Trace().Msg("Closed tunnel connection due to parent context closure")

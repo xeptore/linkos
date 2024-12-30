@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	stdlog "log"
-	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -177,7 +176,6 @@ func run(ctx context.Context, logger zerolog.Logger) (err error) {
 	client := Client{
 		t:      t,
 		cfg:    cfg,
-		ip:     net.ParseIP(cfg.IP),
 		logger: logger.With().Str("module", "client").Logger(),
 	}
 

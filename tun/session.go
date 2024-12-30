@@ -45,7 +45,7 @@ func (t *Tun) StartSession(p pool.Pool) (*Session, error) {
 
 func (s *Session) Close() error {
 	if err := kernel32.SetEvent(s.stopEvent); nil != err {
-		return fmt.Errorf("tun: failed to set StopEvent: %v", err)
+		return fmt.Errorf("tun: failed to set StopEvent: %w", err)
 	}
 	defer func() {
 		s.logger.Trace().Msg("Closing StopEvent handle")

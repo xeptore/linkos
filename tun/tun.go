@@ -5,6 +5,7 @@ package tun
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 
 	"github.com/rs/zerolog"
@@ -36,7 +37,7 @@ func (err *CreateError) Error() string {
 
 func New(logger zerolog.Logger, ringSize uint32) (*Tun, error) {
 	if ver, err := wintun.RunningVersion(); nil != err {
-		logger.Error().Err(err).Msg("Failed to get wintun version")
+		logger.Error().Func(errutil.TreeLog(err)).Err(err).Msg("Failed to get wintun version")
 	} else {
 		logger.Debug().Str("version", ver).Msg("Loading wintun")
 	}
@@ -74,8 +75,8 @@ func New(logger zerolog.Logger, ringSize uint32) (*Tun, error) {
 
 var afInetFamily = winipcfg.AddressFamily(windows.AF_INET)
 
-func (t *Tun) AssignIPv4(ip string) error {
-	ipAddr, err := netip.ParseAddr(ip)
+func (t *Tun) AssignIPv4(ip net.IP) error {
+	ipAddr, err := netip.ParseAddr(ip.String())
 	if nil != err {
 		return fmt.Errorf("tun: failed to parse adapter IP address: %v", err)
 	}
