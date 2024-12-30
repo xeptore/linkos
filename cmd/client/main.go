@@ -54,13 +54,7 @@ func main() {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
-	logger, err := log.New()
-	if nil != err {
-		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
-		waitForEnter(ctx)
-		return
-	}
-	logger = logger.With().Str("version", Version).Logger()
+	logger := log.NewWindowsCLI().With().Str("version", Version).Logger()
 	logger.Info().Msg("Starting VPN client")
 
 	defer func() {

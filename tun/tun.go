@@ -3,6 +3,7 @@
 package tun
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 
@@ -46,7 +47,9 @@ func New(logger zerolog.Logger, ringSize uint32) (*Tun, error) {
 	}
 
 	if err := wintun.Uninstall(); nil != err {
-		logger.Warn().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to uninstall wintun driver")
+		if !errors.Is(err, windows.ERROR_INF_IN_USE_BY_DEVICES) {
+			logger.Warn().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to uninstall wintun driver")
+		}
 	}
 
 	logger.Trace().Str("guid", TunGUID).Msg("Creating adapter")
