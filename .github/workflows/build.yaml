@@ -270,10 +270,10 @@ jobs:
           tag: ${{ needs.tag.outputs.tag_name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
-          omitBody: true
         continue-on-error: true
         id: release_try_0
       - name: Release (Retry 1)
+        if: steps.release_try_0.outcome == 'failure'
         uses: ncipollo/release-action@v1
         with:
           draft: false
@@ -282,10 +282,10 @@ jobs:
           tag: ${{ needs.tag.outputs.tag_name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
-          omitBody: true
         continue-on-error: true
         id: release_try_1
       - name: Release (Retry 2)
+        if: steps.release_try_1.outcome == 'failure'
         uses: ncipollo/release-action@v1
         with:
           draft: false
@@ -294,10 +294,10 @@ jobs:
           tag: ${{ needs.tag.outputs.tag_name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
-          omitBody: true
         continue-on-error: true
         id: release_try_2
       - name: Release (Retry 3)
+        if: steps.release_try_2.outcome == 'failure'
         uses: ncipollo/release-action@v1
         with:
           draft: false
@@ -306,6 +306,5 @@ jobs:
           tag: ${{ needs.tag.outputs.tag_name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
-          omitBody: true
         continue-on-error: true
         id: release_try_3
