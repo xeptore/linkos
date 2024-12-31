@@ -262,57 +262,50 @@ jobs:
         with:
           merge-multiple: true
       - name: Release
-        uses: softprops/action-gh-release@v2.2.0
+        uses: ncipollo/release-action@v1
+        with:
+          draft: false
+          artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
+          name: ${{ needs.tag.outputs.tag_name }}
+          tag: ${{ needs.tag.outputs.tag_name }}
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
+          artifactErrorsFailBuild: true
+          omitBody: true
         continue-on-error: true
         id: release_try_0
-        with:
-          name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
-          draft: false
-          tag_name: ${{ needs.tag.outputs.tag_name }}
-          fail_on_unmatched_files: true
-          files: |-
-            client_windows_amd64.zip
-            server_linux_amd64.tar
       - name: Release (Retry 1)
-        uses: softprops/action-gh-release@v2.2.0
+        uses: ncipollo/release-action@v1
+        with:
+          draft: false
+          artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
+          name: ${{ needs.tag.outputs.tag_name }}
+          tag: ${{ needs.tag.outputs.tag_name }}
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
+          artifactErrorsFailBuild: true
+          omitBody: true
         continue-on-error: true
-        if: steps.release_try_0.outcome == 'failure'
         id: release_try_1
-        with:
-          name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
-          draft: false
-          tag_name: ${{ needs.tag.outputs.tag_name }}
-          fail_on_unmatched_files: true
-          files: |-
-            client_windows_amd64.zip
-            server_linux_amd64.tar
       - name: Release (Retry 2)
-        uses: softprops/action-gh-release@v2.2.0
+        uses: ncipollo/release-action@v1
+        with:
+          draft: false
+          artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
+          name: ${{ needs.tag.outputs.tag_name }}
+          tag: ${{ needs.tag.outputs.tag_name }}
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
+          artifactErrorsFailBuild: true
+          omitBody: true
         continue-on-error: true
-        if: steps.release_try_1.outcome == 'failure'
         id: release_try_2
-        with:
-          name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
-          draft: false
-          tag_name: ${{ needs.tag.outputs.tag_name }}
-          fail_on_unmatched_files: true
-          files: |-
-            client_windows_amd64.zip
-            server_linux_amd64.tar
       - name: Release (Retry 3)
-        uses: softprops/action-gh-release@v2.2.0
-        continue-on-error: false
-        if: steps.release_try_2.outcome == 'failure'
-        id: release_try_3
+        uses: ncipollo/release-action@v1
         with:
-          name: ${{ needs.tag.outputs.tag_name }}
-          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           draft: false
-          tag_name: ${{ needs.tag.outputs.tag_name }}
-          fail_on_unmatched_files: true
-          files: |-
-            client_windows_amd64.zip
-            server_linux_amd64.tar
+          artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
+          name: ${{ needs.tag.outputs.tag_name }}
+          tag: ${{ needs.tag.outputs.tag_name }}
+          prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
+          artifactErrorsFailBuild: true
+          omitBody: true
+        continue-on-error: true
+        id: release_try_3
