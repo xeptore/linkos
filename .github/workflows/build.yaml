@@ -226,7 +226,7 @@ jobs:
     permissions:
       contents: write
     outputs:
-      tag_name: ${{ steps.generate.outputs.tag_name }}
+      name: ${{ steps.generate.outputs.tag_name }}
     runs-on: ubuntu-24.04
     if: github.event_name == 'push' && (github.ref_type == 'tag' || (github.ref_type == 'branch' && (github.ref_name == github.event.repository.default_branch || github.ref_name == 'main')))
     steps:
@@ -266,10 +266,11 @@ jobs:
         with:
           draft: false
           artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
-          name: ${{ needs.tag.outputs.tag_name }}
-          tag: ${{ needs.tag.outputs.tag_name }}
+          name: ${{ needs.tag.outputs.name }}
+          tag: ${{ needs.tag.outputs.name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
+          generateReleaseNotes: true
         continue-on-error: true
         id: release_try_0
       - name: Release (Retry 1)
@@ -278,10 +279,11 @@ jobs:
         with:
           draft: false
           artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
-          name: ${{ needs.tag.outputs.tag_name }}
-          tag: ${{ needs.tag.outputs.tag_name }}
+          name: ${{ needs.tag.outputs.name }}
+          tag: ${{ needs.tag.outputs.name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
+          generateReleaseNotes: true
         continue-on-error: true
         id: release_try_1
       - name: Release (Retry 2)
@@ -290,10 +292,11 @@ jobs:
         with:
           draft: false
           artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
-          name: ${{ needs.tag.outputs.tag_name }}
-          tag: ${{ needs.tag.outputs.tag_name }}
+          name: ${{ needs.tag.outputs.name }}
+          tag: ${{ needs.tag.outputs.name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
+          generateReleaseNotes: true
         continue-on-error: true
         id: release_try_2
       - name: Release (Retry 3)
@@ -302,9 +305,10 @@ jobs:
         with:
           draft: false
           artifacts: "client_windows_amd64.zip,server_linux_amd64.tar"
-          name: ${{ needs.tag.outputs.tag_name }}
-          tag: ${{ needs.tag.outputs.tag_name }}
+          name: ${{ needs.tag.outputs.name }}
+          tag: ${{ needs.tag.outputs.name }}
           prerelease: ${{ github.ref_name == github.event.repository.default_branch }}
           artifactErrorsFailBuild: true
-        continue-on-error: true
+          generateReleaseNotes: true
+        continue-on-error: false
         id: release_try_3
