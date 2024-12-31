@@ -15,6 +15,7 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	golang.org/x/net v0.33.0
+	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.28.0
 	golang.zx2c4.com/wireguard/windows v0.5.3
 	gopkg.in/ini.v1 v1.67.0
@@ -31,7 +32,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

@@ -23,12 +23,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger, err := log.New()
-	if nil != err {
-		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
-		return
-	}
-	logger = logger.With().Str("version", Version).Logger()
+	logger := log.New().With().Str("version", Version).Logger()
 
 	defer func() {
 		if err := recover(); nil != err {

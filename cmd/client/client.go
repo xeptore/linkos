@@ -6,10 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/xeptore/linkos/client/worker"
 	"github.com/xeptore/linkos/config"
@@ -21,15 +21,18 @@ import (
 type Client struct {
 	t      *tun.Tun
 	cfg    *config.Client
-	ip     net.IP
 	logger zerolog.Logger
 }
 
 func (c *Client) run(ctx context.Context) error {
-	var wg sync.WaitGroup
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	var wg sync.WaitGroup
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
 
 	session, err := c.t.StartSession(pool.New(c.cfg.BufferSize))
 	if nil != err {
@@ -37,51 +40,55 @@ func (c *Client) run(ctx context.Context) error {
 	}
 
 	reader := session.Reader(ctx)
-	defer func() {
-		if err := reader.Close(); nil != err {
-			if errors.Is(err, ctx.Err()) {
-				return
-			}
-			c.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to close session packet reader")
-		}
-	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+
 		<-ctx.Done()
+
 		c.logger.Debug().Msg("Closing the session due to context cancellation")
 		if err := session.Close(); nil != err {
-			c.logger.Error().Err(err).Msg("Failed to close session")
+			c.logger.Error().Func(errutil.TreeLog(err)).Err(err).Msg("Failed to close session")
 		} else {
 			c.logger.Debug().Msg("Session successfully closed")
 		}
+
+		if err := reader.Close(); nil != err {
+			if !errors.Is(err, ctx.Err()) {
+				c.logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to close session packet reader")
+			}
+		} else {
+			c.logger.Debug().Msg("Closed session packet reader")
+		}
 	}()
 
-	for idx, port := range config.DefaultClientRecvPorts {
-		w := worker.NewRecv(
-			c.logger.With().Str("kind", "recv").Int("worker_id", idx).Logger(),
-			c.cfg,
-			c.ip,
-			port,
-			session,
-		)
-		wg.Add(1)
-		go w.Run(ctx, &wg)
-	}
+	for {
+		eg, egCtx := errgroup.WithContext(ctx)
+		for idx, port := range config.DefaultClientRecvPorts {
+			w := worker.NewRecv(
+				c.logger.With().Str("kind", "recv").Int("worker_id", idx).Logger(),
+				c.cfg,
+				port,
+				session,
+			)
+			eg.Go(func() error { return w.Run(egCtx) })
+		}
 
-	for idx, port := range config.DefaultClientSendPorts {
-		w := worker.NewSend(
-			c.logger.With().Str("kind", "send").Int("worker_id", idx).Logger(),
-			c.cfg,
-			c.ip,
-			port,
-			reader.Packets,
-		)
-		wg.Add(1)
-		go w.Run(ctx, &wg)
-	}
+		for idx, port := range config.DefaultClientSendPorts {
+			w := worker.NewSend(
+				c.logger.With().Str("kind", "send").Int("worker_id", idx).Logger(),
+				c.cfg,
+				port,
+				reader.Packets,
+			)
+			eg.Go(func() error { return w.Run(egCtx) })
+		}
 
-	wg.Wait()
-	return ctx.Err()
+		_ = eg.Wait() // At least one worker should fail with error
+		if err := ctx.Err(); nil != err {
+			return ctx.Err()
+		}
+		c.logger.Warn().Msg("Detected worker disconnect. Recreating workers...")
+	}
 }
