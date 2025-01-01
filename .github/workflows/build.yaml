@@ -51,6 +51,7 @@ jobs:
           location: D:\msys2
           update: true
           release: true
+          cache: false
           install: base-devel mingw-w64-clang-x86_64-clang
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -102,6 +103,7 @@ jobs:
           location: D:\msys2
           update: true
           release: true
+          cache: false
           install: base-devel mingw-w64-clang-x86_64-clang unzip mingw-w64-clang-x86_64-imagemagick git
       - name: Get Clang Path
         id: clang
