@@ -53,10 +53,19 @@ jobs:
           release: true
           cache: false
           install: base-devel mingw-w64-clang-x86_64-clang
+      - name: Get Clang Path
+        id: clang
+        run: |-
+          ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang --version
+          ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang++ --version
+          echo "dir=${{ steps.msys2.outputs.msys2-location }}\clang64\bin" >> $env:GITHUB_OUTPUT
       - name: Install Task
         uses: arduino/setup-task@v2
       - name: Run Code Linter
         run: task lint:ci
+        env:
+          CC: ${{ steps.clang.outputs.dir }}\clang
+          CXX: ${{ steps.clang.outputs.dir }}\clang++
   lint-server:
     name: Lint Server
     runs-on: ubuntu-24.04
@@ -108,9 +117,9 @@ jobs:
       - name: Get Clang Path
         id: clang
         run: |-
-          echo "dir=${{ steps.msys2.outputs.msys2-location }}\clang64\bin" >> $env:GITHUB_OUTPUT
           ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang --version
           ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang++ --version
+          echo "dir=${{ steps.msys2.outputs.msys2-location }}\clang64\bin" >> $env:GITHUB_OUTPUT
       - name: Install Task
         uses: arduino/setup-task@v2
       - name: Get OS & Arch
