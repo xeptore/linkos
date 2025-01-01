@@ -2,12 +2,10 @@
 
 package iphlpapi
 
-/*
-#include <winsock2.h>
-#include <ws2ipdef.h>
-#include <iphlpapi.h>
-#include <netioapi.h>
-*/
+// #include <winsock2.h>
+// #include <ws2ipdef.h>
+// #include <iphlpapi.h>
+// #include <netioapi.h>
 import "C"
 
 import (
