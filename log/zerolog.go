@@ -26,15 +26,4 @@ func newLogger(o io.Writer) zerolog.Logger {
 		Logger()
 }
 
-func NewWindowsCLI() zerolog.Logger {
-	return newLogger(
-		zerolog.SyncWriter(
-			zerolog.ConsoleWriter{ //nolint:exhaustruct
-				Out:        os.Stderr,
-				TimeFormat: time.DateTime,
-			},
-		),
-	)
-}
-
 const Levelless = zerolog.InfoLevel

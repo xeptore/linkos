@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/sys/windows"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
@@ -53,7 +54,55 @@ func main() {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
-	logger := log.NewWindowsCLI().With().Str("version", Version).Logger()
+	logger := zerolog.New(log.NewConsoleWriter(zerolog.ErrorLevel))
+	cfg, err := config.LoadClient(configFileName)
+	if nil != err {
+		if errors.Is(err, os.ErrNotExist) {
+			if err := os.WriteFile(configFileName, config.ClientConfigTemplate, 0o0600); nil != err {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Config file was not found. Tried creating a template file but did not succeeded")
+			} else {
+				logger.Error().Msg("Config file was not found. A template is created with name %s. You should fill with proper values")
+			}
+		} else {
+			logger.Error().Err(err).Msg("Failed to load config")
+		}
+		return
+	}
+
+	cliWriter := log.NewConsoleWriter(cfg.LogLevel)
+	logger = zerolog.
+		New(cliWriter).
+		Level(zerolog.TraceLevel).
+		With().
+		Timestamp().
+		Str("version", Version).
+		Logger()
+
+	if cfg.FileLogLevel != zerolog.Disabled {
+		fileLogName := "log." + time.Now().UTC().Format("20060102150405") + ".jsonl"
+		logger.Info().Str("file_name", fileLogName).Msg("Enabling file log writer")
+		fileWriter, err := log.NewFileWriter(fileLogName)
+		if nil != err {
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to create file log writer")
+		} else {
+			defer func() {
+				logger = logger.Output(cliWriter)
+				if err := fileWriter.Close(); nil != err {
+					logger.Error().Err(err).Msg("Failed to close file log writer")
+				} else {
+					logger.Debug().Msg("Closed file log writer")
+				}
+			}()
+			logger = logger.Output(
+				zerolog.MultiLevelWriter(
+					cliWriter,
+					fileWriter,
+				),
+			)
+		}
+	}
+
+	logger.Debug().Dict("config_options", cfg.LogDict()).Msg("Loaded configuration")
 	logger.Info().Msg("Starting VPN client")
 
 	defer func() {
@@ -79,11 +128,15 @@ func main() {
 		}
 	}()
 
-	if err := run(ctx, logger); nil != err {
+	if err := run(ctx, logger, cfg); nil != err {
 		if cause := context.Cause(ctx); errors.Is(cause, errSigTrapped) {
-			logger.Debug().Msg("Client retutned due to receiving a signal")
+			logger.Debug().Msg("Client returned due to receiving a signal")
 		} else if createErr := new(tun.CreateError); errors.As(err, &createErr) {
-			logger.Error().Err(createErr).Msg("Failed to create VPN tunnel. Try restarting your machine if the problem persists.")
+			if errors.Is(createErr.Err, windows.ERROR_ACCESS_DENIED) {
+				logger.Error().Msg("Failed to create VPN tunnel. Rerun the application as Administrator.")
+			} else {
+				logger.Error().Func(errutil.TreeLog(createErr.Err)).Err(createErr.Err).Msg("Failed to create VPN tunnel. Try restarting your machine if the problem persists.")
+			}
 		} else if openURLErr := new(OpenLatestVersionDownloadURLError); errors.As(err, &openURLErr) {
 			logger.
 				Error().
@@ -115,20 +168,7 @@ func (err *OpenLatestVersionDownloadURLError) Error() string {
 	return "failed to open latest version download URL"
 }
 
-func run(ctx context.Context, logger zerolog.Logger) (err error) {
-	cfg, err := config.LoadClient(configFileName)
-	if nil != err {
-		if errors.Is(err, os.ErrNotExist) {
-			if err := os.WriteFile(configFileName, config.ClientConfigTemplate, 0o0600); nil != err {
-				return fmt.Errorf("config: file was not found. Tried creating a template file but did not succeeded: %v", err)
-			}
-			return fmt.Errorf("config: file was not found. A template is created with name %s. You should fill with proper values: %v", configFileName, err)
-		}
-		return fmt.Errorf("config: failed to load: %v", err)
-	}
-	logger = logger.Level(cfg.LogLevel)
-	logger.Debug().Dict("config_options", cfg.LogDict()).Msg("Loaded configuration")
-
+func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err error) {
 	if Version != "dev" {
 		logger.Trace().Str("current_version", Version).Msg("Checking for new releases")
 		if exists, latestTag, err := update.NewerVersionExists(ctx, logger, Version); nil != err {

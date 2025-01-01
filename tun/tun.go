@@ -48,7 +48,7 @@ func New(logger zerolog.Logger, ringSize uint32) (*Tun, error) {
 	}
 
 	if err := wintun.Uninstall(); nil != err {
-		if !errors.Is(err, windows.ERROR_INF_IN_USE_BY_DEVICES) {
+		if !errors.Is(err, windows.ERROR_INF_IN_USE_BY_DEVICES) && !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
 			logger.Warn().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to uninstall wintun driver")
 		}
 	}
@@ -56,7 +56,7 @@ func New(logger zerolog.Logger, ringSize uint32) (*Tun, error) {
 	logger.Trace().Str("guid", TunGUID).Msg("Creating adapter")
 	adapter, err := wintun.CreateAdapter("Linkos", "Linkos", &guid)
 	if nil != err {
-		return nil, &CreateError{fmt.Errorf("tun: failed to create adapter: %v", err)}
+		return nil, &CreateError{fmt.Errorf("tun: failed to create adapter: %w", err)}
 	}
 	logger.Debug().Msg("Adapter created")
 
