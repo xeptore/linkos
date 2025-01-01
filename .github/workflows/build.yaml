@@ -164,7 +164,6 @@ jobs:
   build-server:
     name: Build Server
     runs-on: ubuntu-24.04
-    needs: lint-server
     permissions:
       contents: read
     steps:
@@ -222,6 +221,7 @@ jobs:
     needs: 
       - lint-client
       - build-client
+      - lint-server
       - build-server
     permissions:
       contents: write
