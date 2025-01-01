@@ -24,6 +24,7 @@ type Client struct {
 	SocketSendBuffer int64
 	MTU              uint32
 	LogLevel         zerolog.Level
+	FileLogLevel     zerolog.Level
 }
 
 func (c *Client) LogDict() *zerolog.Event {
@@ -36,7 +37,8 @@ func (c *Client) LogDict() *zerolog.Event {
 		Int64("socket_recv_buffer", c.SocketRecvBuffer).
 		Uint32("mtu", c.MTU).
 		Uint32("ring_size", c.RingSize).
-		Str("log_level", c.LogLevel.String())
+		Str("log_level", c.LogLevel.String()).
+		Str("file_log_level", c.FileLogLevel.String())
 }
 
 func LoadClient(filename string) (*Client, error) {
@@ -111,7 +113,31 @@ func LoadClient(filename string) (*Client, error) {
 		return nil, errors.New("config: ip is not a valid IP address")
 	}
 
-	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
+	logLevel := DefaultClientLogLevel
+	if logLevelStr := strings.TrimSpace(cfg.Section("").Key("log_level").String()); logLevelStr != "" {
+		if lvl, err := zerolog.ParseLevel(logLevelStr); nil != err {
+			acceptedLevels := make([]string, len(allLogLevels))
+			for i, lvl := range allLogLevels {
+				acceptedLevels[i] = fmt.Sprintf("%q", lvl)
+			}
+			return nil, fmt.Errorf("config: invalid value of %q for log_level configuration option, accepted values are %s", logLevelStr, strings.Join(acceptedLevels, ", "))
+		} else {
+			logLevel = lvl
+		}
+	}
+
+	fileLogLevel := zerolog.Disabled
+	if logLevelStr := strings.TrimSpace(cfg.Section("").Key("file_log_level").String()); logLevelStr != "" {
+		if lvl, err := zerolog.ParseLevel(logLevelStr); nil != err {
+			acceptedLevels := make([]string, len(allLogLevels))
+			for i, lvl := range allLogLevels {
+				acceptedLevels[i] = fmt.Sprintf("%q", lvl)
+			}
+			return nil, fmt.Errorf("config: invalid value of %q for file_log_level configuration option, accepted values are %s", logLevelStr, strings.Join(acceptedLevels, ", "))
+		} else {
+			fileLogLevel = lvl
+		}
+	}
 
 	out := Client{
 		ServerHost:       serverHost,
@@ -121,20 +147,10 @@ func LoadClient(filename string) (*Client, error) {
 		SocketRecvBuffer: socketRecvBuffer,
 		SocketSendBuffer: socketSendBuffer,
 		MTU:              mtu,
-		LogLevel:         DefaultClientLogLevel,
+		LogLevel:         logLevel,
+		FileLogLevel:     fileLogLevel,
 	}
 
-	if logLevel != "" {
-		if lvl, err := zerolog.ParseLevel(logLevel); nil != err {
-			acceptedLevels := make([]string, len(allLogLevels))
-			for i, lvl := range allLogLevels {
-				acceptedLevels[i] = fmt.Sprintf("%q", lvl)
-			}
-			return nil, fmt.Errorf("config: invalid value of %q for log_level configuration option, accepted values are %s", logLevel, strings.Join(acceptedLevels, ", "))
-		} else {
-			out.LogLevel = lvl
-		}
-	}
 	return &out, nil
 }
 
