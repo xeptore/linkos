@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/sys/windows"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
@@ -83,7 +84,11 @@ func main() {
 		if cause := context.Cause(ctx); errors.Is(cause, errSigTrapped) {
 			logger.Debug().Msg("Client retutned due to receiving a signal")
 		} else if createErr := new(tun.CreateError); errors.As(err, &createErr) {
-			logger.Error().Err(createErr).Msg("Failed to create VPN tunnel. Try restarting your machine if the problem persists.")
+			if errors.Is(createErr.Err, windows.ERROR_ACCESS_DENIED) {
+				logger.Error().Msg("Failed to create VPN tunnel. Rerun the application as Administrator.")
+			} else {
+				logger.Error().Func(errutil.TreeLog(createErr.Err)).Err(createErr.Err).Msg("Failed to create VPN tunnel. Try restarting your machine if the problem persists.")
+			}
 		} else if openURLErr := new(OpenLatestVersionDownloadURLError); errors.As(err, &openURLErr) {
 			logger.
 				Error().
