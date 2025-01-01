@@ -61,8 +61,6 @@ tasks:
 
   lint:
     internal: true
-    env:
-      CGO_ENABLED: 1
     requires:
       vars:
         - OUT_FORMAT
