@@ -80,7 +80,6 @@ jobs:
   build-client:
     name: Build Client
     runs-on: windows-latest
-    needs: lint-client
     permissions:
       contents: read
     steps:
@@ -221,6 +220,7 @@ jobs:
   tag:
     name: Tag
     needs: 
+      - lint-client
       - build-client
       - build-server
     permissions:
