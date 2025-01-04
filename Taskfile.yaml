@@ -1,8 +1,5 @@
 version: "3"
 
-vars:
-  GOLANGCI_LINT_VERSION: v1.63.1
-
 tasks:
   clean:
     cmd: go clean -r -cache -testcache -modcache
@@ -66,7 +63,7 @@ tasks:
         - OUT_FORMAT
     cmd: |-
       go run \
-        github.com/golangci/golangci-lint/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} \
+        github.com/golangci/golangci-lint/cmd/golangci-lint \
         run {{ if .FIX }}--fix {{ end }}\
         --print-resources-usage \
         --out-format="{{.OUT_FORMAT}}"
