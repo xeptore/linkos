@@ -9,7 +9,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
 	github.com/miekg/dns v1.1.62
-	github.com/panjf2000/gnet/v2 v2.6.3
+	github.com/panjf2000/gnet/v2 v2.7.1
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.47.0
 	github.com/stretchr/testify v1.10.0
@@ -17,7 +17,7 @@ require (
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	golang.org/x/net v0.33.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.29.0
 	golang.zx2c4.com/wireguard/windows v0.5.3
 	gopkg.in/ini.v1 v1.67.0
 )
