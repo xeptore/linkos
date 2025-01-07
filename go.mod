@@ -12,6 +12,7 @@ require (
 	github.com/panjf2000/gnet/v2 v2.7.1
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.47.0
+	github.com/schollz/progressbar/v3 v3.17.1
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
@@ -161,7 +162,6 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
 	github.com/sashamelentyev/usestdlibvars v1.28.0 // indirect
-	github.com/schollz/progressbar/v3 v3.17.1 // indirect
 	github.com/securego/gosec/v2 v2.21.4 // indirect
 	github.com/shazow/go-diff v0.0.0-20160112020656-b6b7b6733b8c // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect

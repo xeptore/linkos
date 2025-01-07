@@ -80,7 +80,7 @@ func getReleasePage(ctx context.Context, client *github.Client, page int) ([]*gi
 	return rls, nil
 }
 
-func Download(ctx context.Context, tag string) error {
+func Download(ctx context.Context, tag string) (err error) {
 	httpClient := http.DefaultClient
 	httpClient.Transport = dnsutil.FromRoundTripper(http.DefaultTransport)
 	client := github.NewClient(httpClient)
@@ -104,28 +104,44 @@ func Download(ctx context.Context, tag string) error {
 		}
 	}
 
+	asset, _, err := client.Repositories.GetReleaseAsset(ctx, "xeptore", "linkos", assetID)
+	if nil != err {
+		return fmt.Errorf("update: failed to get asset file size: %v", err)
+	}
+
 	rc, _, err := client.Repositories.DownloadReleaseAsset(ctx, "xeptore", "linkos", assetID, httpClient)
 	if nil != err {
 		return fmt.Errorf("update: failed to download release asset: %v", err)
 	}
-	defer rc.Close() // TODO: handle error
+	defer func() {
+		if closeErr := rc.Close(); nil != closeErr {
+			err = errors.Join(err, fmt.Errorf("update: failed to close release download stream: %v", closeErr))
+		}
+	}()
 
-	dst, err := os.OpenFile(filepath.Join(processAbsPath(), assetFilename), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	dst, err := os.OpenFile(filepath.Join(processAbsPath(), assetFilename), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if nil != err {
 		return fmt.Errorf("update: failed to open file for writing: %v", err)
 	}
-	defer dst.Close() // TODO: handle error
+	defer func() {
+		if closeErr := dst.Close(); nil != closeErr {
+			err = errors.Join(err, fmt.Errorf("update: failed to close download destination file: %v", closeErr))
+		}
+	}()
 
-	bar := progressbar.DefaultBytes(-1, "Downloading")
+	bar := progressbar.DefaultBytes(int64(asset.GetSize()), "Downloading")
 	if _, err := io.Copy(io.MultiWriter(bar, dst), rc); nil != err {
 		return fmt.Errorf("update: failed to write file: %v", err)
 	}
 	if err := dst.Sync(); nil != err {
 		return fmt.Errorf("update: failed to sync file: %v", err)
 	}
+	if err := bar.Finish(); nil != err {
+		return fmt.Errorf("update: failed to finish progress bar: %v", err)
+	}
 	return nil
 }
 
 func processAbsPath() string {
-	return os.Args[0]
+	return filepath.Dir(os.Args[0])
 }
