@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -171,20 +170,29 @@ func (err *OpenLatestVersionDownloadURLError) Error() string {
 func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err error) {
 	if Version != "dev" {
 		logger.Trace().Str("current_version", Version).Msg("Checking for new releases")
-		if exists, latestTag, err := update.NewerVersionExists(ctx, logger, Version); nil != err {
+		exists, latestTag, err := update.NewerVersionExists(ctx, logger, Version)
+		switch {
+		case nil != err:
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to check for newer version existence. Make sure you have internet access and rerun the application.")
 			return nil
-		} else if exists {
-			logger.Error().Msg("Newer version exists. Download URL will be opened soon")
-			time.Sleep(time.Second)
-			downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/client_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
-			cmd := []string{"start", downloadURL}
-			if out, err := exec.Command("cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
-				return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
+		case exists:
+			logger.Error().Msg("Newer version exists, and is going to be downloaded...")
+			if err := update.Download(ctx, latestTag); nil != err {
+				logger.Error().Func(errutil.TreeLog(err)).Msg("Failed to download latest release. Download link will be opened in a second.")
+				downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/" + update.AssetFilename()
+				cmd := []string{"start", downloadURL}
+				if out, err := exec.Command("cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
+					return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
+				}
+			} else {
+				logger.Info().Msg("Newer version downloaded. Extract and run it.")
 			}
 			return nil
+		case !exists && latestTag != Version:
+			logger.Warn().Str("current_version", Version).Str("latest_version", latestTag).Msg("You are running a pre-release version.")
+		default:
+			logger.Info().Msg("Already running the latest version")
 		}
-		logger.Info().Msg("Already running the latest version")
 	}
 
 	logger.Trace().Msg("Initializing VPN tunnel")
