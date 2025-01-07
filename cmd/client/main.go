@@ -53,6 +53,13 @@ func main() {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
+	var wg sync.WaitGroup
+	defer func() {
+		cancel(nil)
+		wg.Wait()
+		waitForEnter(ctx)
+	}()
+
 	logger := zerolog.New(log.NewConsoleWriter(zerolog.ErrorLevel))
 	cfg, err := config.LoadClient(configFileName)
 	if nil != err {
@@ -113,7 +120,6 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
 
-	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -126,6 +132,10 @@ func main() {
 			cancel(errSigTrapped)
 		}
 	}()
+
+	if err := os.RemoveAll(update.BackupProcessFilePath()); nil != err {
+		logger.Error().Func(errutil.TreeLog(err)).Msg("Failed to remove old backup executable file")
+	}
 
 	if err := run(ctx, logger, cfg); nil != err {
 		if cause := context.Cause(ctx); errors.Is(cause, errSigTrapped) {
@@ -152,10 +162,6 @@ func main() {
 			logger.Error().Err(err).Msg("Failed to run the application")
 		}
 	}
-
-	cancel(nil)
-	wg.Wait()
-	waitForEnter(ctx)
 }
 
 type OpenLatestVersionDownloadURLError struct {
@@ -176,8 +182,11 @@ func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err er
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to check for newer version existence. Make sure you have internet access and rerun the application.")
 			return nil
 		case exists:
-			logger.Error().Msg("Newer version exists, and is going to be downloaded...")
+			logger.Warn().Msg("Newer version exists, and is going to be downloaded...")
 			if err := update.Download(ctx, latestTag); nil != err {
+				if err := ctx.Err(); nil != err {
+					return err
+				}
 				logger.Error().Func(errutil.TreeLog(err)).Msg("Failed to download latest release. Download link will be opened in a second.")
 				downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/" + update.AssetFilename()
 				cmd := []string{"start", downloadURL}
@@ -185,7 +194,7 @@ func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err er
 					return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
 				}
 			} else {
-				logger.Info().Msg("Newer version downloaded. Extract and run it.")
+				logger.Info().Msg("Newer version downloaded. Rerun the program.")
 			}
 			return nil
 		case !exists && latestTag != Version:
