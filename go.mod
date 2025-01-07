@@ -12,6 +12,7 @@ require (
 	github.com/panjf2000/gnet/v2 v2.7.1
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.47.0
+	github.com/schollz/progressbar/v3 v3.17.1
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
@@ -129,6 +130,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mgechev/revive v1.5.1 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moricho/tparallel v0.3.2 // indirect
@@ -199,6 +201,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20241108190413-2d47ceb2692f // indirect
 	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
