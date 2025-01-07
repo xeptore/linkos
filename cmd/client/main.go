@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -177,12 +176,16 @@ func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err er
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to check for newer version existence. Make sure you have internet access and rerun the application.")
 			return nil
 		case exists:
-			logger.Error().Msg("Newer version exists. Download URL will be opened soon")
-			time.Sleep(time.Second)
-			downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/client_" + runtime.GOOS + "_" + runtime.GOARCH + ".zip"
-			cmd := []string{"start", downloadURL}
-			if out, err := exec.Command("cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
-				return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
+			logger.Error().Msg("Newer version exists, and is going to be downloaded...")
+			if err := update.Download(ctx, latestTag); nil != err {
+				logger.Error().Msg("Failed to download latest release. Download link will be opened in a second.")
+				downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/" + update.AssetFilename()
+				cmd := []string{"start", downloadURL}
+				if out, err := exec.Command("cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
+					return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
+				}
+			} else {
+				logger.Info().Msg("Newer version downloaded. Extract and run it.")
 			}
 			return nil
 		case !exists && latestTag != Version:
