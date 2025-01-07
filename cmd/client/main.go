@@ -183,8 +183,11 @@ func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err er
 				return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
 			}
 			return nil
+		} else if !exists && latestTag != Version {
+			logger.Warn().Str("current_version", Version).Str("latest_version", latestTag).Msg("You are running a pre-release version.")
+		} else {
+			logger.Info().Msg("Already running the latest version")
 		}
-		logger.Info().Msg("Already running the latest version")
 	}
 
 	logger.Trace().Msg("Initializing VPN tunnel")

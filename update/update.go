@@ -33,7 +33,14 @@ func NewerVersionExists(ctx context.Context, logger zerolog.Logger, currentVersi
 	case currentVersion < latestTag:
 		return true, latestTag, nil
 	default:
-		return false, "", fmt.Errorf("update: unexpected condition: current version %q is more recent than latest release version %q", currentVersion, latestTag)
+		currRelease, _, err := client.Repositories.GetReleaseByTag(ctx, "xeptore", "linkos", currentVersion)
+		if nil != err {
+			return false, "", fmt.Errorf("update: failed to get current release info: %v", err)
+		}
+		if !currRelease.GetPrerelease() {
+			return false, "", fmt.Errorf("update: unexpected condition: current version %q is more recent than latest release version %q", currentVersion, latestTag)
+		}
+		return false, latestTag, nil
 	}
 }
 
