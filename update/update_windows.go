@@ -173,7 +173,7 @@ func unzip() (err error) {
 	}
 	defer func() {
 		if closeErr := archive.Close(); nil != closeErr {
-			err = errors.Join(err, fmt.Errorf("unzip: failed to close downloaded zip archive: %v", err))
+			err = errors.Join(err, fmt.Errorf("unzip: failed to close downloaded zip archive: %v", closeErr))
 		}
 	}()
 
@@ -182,7 +182,7 @@ func unzip() (err error) {
 		backupExeFileName  = BackupProcessFilePath()
 	)
 	if err := os.Rename(runningExeFileName, backupExeFileName); nil != err {
-		return err
+		return fmt.Errorf("unzip: failed to backup running executable file: %v", err)
 	}
 
 	if filenameW, err := windows.UTF16PtrFromString(backupExeFileName); nil != err {
@@ -204,8 +204,9 @@ func unzip() (err error) {
 }
 
 func extractZIPFile(f *zip.File, dstDir string) (err error) {
-	dstFilePath := filepath.Join(dstDir, f.Name)                                          //nolint:gosec
-	if !strings.HasPrefix(dstFilePath, filepath.Clean(dstDir)+string(os.PathSeparator)) { // Mitigates ZIP slip vulnerability that can be caused due to above path concatenation: https://github.com/securego/gosec/issues/324#issuecomment-935927967
+	dstFilePath := filepath.Join(dstDir, f.Name) //nolint:gosec
+	// 👇 Mitigates ZIP slip vulnerability that can be caused due to above path concatenation: https://github.com/securego/gosec/issues/324#issuecomment-935927967
+	if !strings.HasPrefix(dstFilePath, filepath.Clean(dstDir)+string(os.PathSeparator)) {
 		return fmt.Errorf("unzip: failed to extract archive file %q as it is an invalid path", dstFilePath)
 	}
 
