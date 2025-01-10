@@ -20,8 +20,8 @@ type Client struct {
 	IP               net.IP
 	RingSize         uint32
 	BufferSize       int
-	SocketRecvBuffer int64
-	SocketSendBuffer int64
+	SocketRecvBuffer int
+	SocketSendBuffer int
 	MTU              uint32
 	LogLevel         zerolog.Level
 	FileLogLevel     zerolog.Level
@@ -33,8 +33,8 @@ func (c *Client) LogDict() *zerolog.Event {
 		Str("server_host", c.ServerHost).
 		Str("ip", c.IP.String()).
 		Int("buffer_size", c.BufferSize).
-		Int64("socket_send_buffer", c.SocketSendBuffer).
-		Int64("socket_recv_buffer", c.SocketRecvBuffer).
+		Int("socket_send_buffer", c.SocketSendBuffer).
+		Int("socket_recv_buffer", c.SocketRecvBuffer).
 		Uint32("mtu", c.MTU).
 		Uint32("ring_size", c.RingSize).
 		Str("log_level", c.LogLevel.String()).
@@ -77,21 +77,21 @@ func LoadClient(filename string) (*Client, error) {
 		}
 	}
 
-	var socketSendBuffer int64 = int64(DefaultClientSocketSendBuffer)
+	socketSendBuffer := int(DefaultClientSocketSendBuffer)
 	if socketSendBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_send_buffer").String()); len(socketSendBufferStr) != 0 {
 		if i, err := units.ParseStrictBytes(socketSendBufferStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for socket_send_buffer configuration option, expected byte size", socketSendBufferStr)
 		} else {
-			socketSendBuffer = i
+			socketSendBuffer = int(i)
 		}
 	}
 
-	var socketRecvBuffer int64 = int64(DefaultClientSocketRecvBuffer)
+	socketRecvBuffer := int(DefaultClientSocketRecvBuffer)
 	if socketRecvBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_recv_buffer").String()); len(socketRecvBufferStr) != 0 {
 		if i, err := units.ParseStrictBytes(socketRecvBufferStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for socket_recv_buffer configuration option, expected byte size", socketRecvBufferStr)
 		} else {
-			socketRecvBuffer = i
+			socketRecvBuffer = int(i)
 		}
 	}
 
