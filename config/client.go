@@ -77,7 +77,7 @@ func LoadClient(filename string) (*Client, error) {
 		}
 	}
 
-	var socketSendBuffer int64 = DefaultClientSendBuffer
+	var socketSendBuffer int64 = int64(DefaultClientSocketSendBuffer)
 	if socketSendBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_send_buffer").String()); len(socketSendBufferStr) != 0 {
 		if i, err := units.ParseStrictBytes(socketSendBufferStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for socket_send_buffer configuration option, expected byte size", socketSendBufferStr)
@@ -86,7 +86,7 @@ func LoadClient(filename string) (*Client, error) {
 		}
 	}
 
-	var socketRecvBuffer int64 = DefaultClientSocketRecvBuffer
+	var socketRecvBuffer int64 = int64(DefaultClientSocketRecvBuffer)
 	if socketRecvBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_recv_buffer").String()); len(socketRecvBufferStr) != 0 {
 		if i, err := units.ParseStrictBytes(socketRecvBufferStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for socket_recv_buffer configuration option, expected byte size", socketRecvBufferStr)
