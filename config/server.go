@@ -25,8 +25,8 @@ type Server struct {
 	BindDev          string
 	IPNet            string
 	NumEventLoops    int
-	SocketRecvBuffer int64
-	SocketSendBuffer int64
+	SocketRecvBuffer int
+	SocketSendBuffer int
 	BufferSize       int
 	LogLevel         zerolog.Level
 }
@@ -38,8 +38,8 @@ func (s *Server) LogDict() *zerolog.Event {
 		Str("bind_dev", s.BindDev).
 		Str("ip_net", s.IPNet).
 		Int("num_event_loops", s.NumEventLoops).
-		Int64("socket_recv_buffer", s.SocketRecvBuffer).
-		Int64("socket_send_buffer", s.SocketSendBuffer).
+		Int("socket_recv_buffer", s.SocketRecvBuffer).
+		Int("socket_send_buffer", s.SocketSendBuffer).
 		Int("buffer_size", s.BufferSize).
 		Str("log_level", s.LogLevel.String())
 }
@@ -86,21 +86,21 @@ func LoadServer(filename string) (*Server, error) {
 		}
 	}
 
-	var socketRecvBuffer int64 = DefaultServerSocketRecvBufferSize
+	socketRecvBuffer := int(DefaultServerSocketRecvBufferSize)
 	if socketRecvBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_recv_buffer").String()); len(socketRecvBufferStr) != 0 {
 		if b, err := units.ParseStrictBytes(socketRecvBufferStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for socket_recv_buffer configuration option, expected byte unit", socketRecvBufferStr)
 		} else {
-			socketRecvBuffer = b
+			socketRecvBuffer = int(b)
 		}
 	}
 
-	var socketSendBuffer int64 = DefaultServerSocketSendBufferSize
+	socketSendBuffer := int(DefaultServerSocketSendBufferSize)
 	if socketSendBufferStr := strings.TrimSpace(cfg.Section("").Key("socket_send_buffer").String()); len(socketSendBufferStr) != 0 {
 		if b, err := units.ParseStrictBytes(socketSendBufferStr); nil != err {
 			return nil, fmt.Errorf("config: invalid value of %q for socket_send_buffer configuration option, expected byte unit", socketSendBufferStr)
 		} else {
-			socketSendBuffer = b
+			socketSendBuffer = int(b)
 		}
 	}
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/alecthomas/units"
 	"github.com/rs/zerolog"
 )
 
@@ -11,27 +12,20 @@ const (
 )
 
 const (
-	b   = 1
-	kib = 1024 * b
-	mib = 1024 * kib
-	gib = 1024 * mib
-)
-
-const (
 	DefaultServerLogLevel               = zerolog.InfoLevel
 	DefaultClientLogLevel               = zerolog.InfoLevel
 	DefaultTunRingSize                  = 1
 	DefaultClientTunDeviceMTU           = 1280
 	DefaultBufferSize                   = 1280
-	DefaultClientSendBuffer             = 16 * kib
-	DefaultClientSocketRecvBuffer       = 16 * kib
+	DefaultClientSocketRecvBuffer       = 512 * units.KiB
+	DefaultClientSocketSendBuffer       = 256 * units.KiB
 	DefaultServerMaxClients             = 10
-	DefaultServerNumEventLoops          = 512
+	DefaultServerNumEventLoops          = 0
 	DefaultServerCleanupTickIntervalSec = 5 * minute
 	DefaultKeepAliveSec                 = 25 * second
 	DefaultInactivityKeepAliveLimit     = 5
-	DefaultServerSocketSendBufferSize   = 64 * kib
-	DefaultServerSocketRecvBufferSize   = 64 * kib
+	DefaultServerSocketRecvBufferSize   = 2 * units.MiB
+	DefaultServerSocketSendBufferSize   = 1 * units.MiB
 )
 
 var (

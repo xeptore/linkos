@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"runtime"
 	"slices"
 	"strconv"
 	"sync"
@@ -127,23 +128,19 @@ func (s *Server) Run(ctx context.Context) error {
 		gnet.WithWriteBufferCap(s.cfg.BufferSize),
 		gnet.WithLockOSThread(false),
 		gnet.WithTicker(true),
-		gnet.WithSocketRecvBuffer(int(s.cfg.SocketSendBuffer)),
-		gnet.WithSocketSendBuffer(int(s.cfg.SocketRecvBuffer)),
+		gnet.WithSocketRecvBuffer(s.cfg.SocketSendBuffer),
+		gnet.WithSocketSendBuffer(s.cfg.SocketRecvBuffer),
 		gnet.WithLogLevel(logging.PanicLevel),
 		gnet.WithLogger(logging.Logger(zap.NewNop().Sugar())),
 	}
 
-	if s.cfg.NumEventLoops > 0 {
-		opts = append(
-			opts,
-			gnet.WithMulticore(true),
-			gnet.WithNumEventLoop(s.cfg.NumEventLoops),
-		)
-	} else {
-		opts = append(
-			opts,
-			gnet.WithMulticore(false),
-		)
+	switch {
+	case s.cfg.NumEventLoops < 0:
+		opts = append(opts, gnet.WithMulticore(false))
+	case s.cfg.NumEventLoops == 0:
+		opts = append(opts, gnet.WithNumEventLoop(runtime.NumCPU()))
+	default:
+		opts = append(opts, gnet.WithNumEventLoop(s.cfg.NumEventLoops))
 	}
 
 	protoAddrs := lo.Map(

@@ -28,7 +28,7 @@ func NewSend(logger zerolog.Logger, cfg *config.Client, serverPort uint16, sessi
 		common: common{
 			serverHost:       cfg.ServerHost,
 			serverPort:       serverPort,
-			socketSendBuffer: int(cfg.SocketSendBuffer),
+			socketSendBuffer: cfg.SocketSendBuffer,
 			socketRecvBuffer: 0, // Nothing is expected to be received on this socket
 			srcIP:            cfg.IP,
 			logger:           logger,

@@ -30,7 +30,7 @@ func NewRecv(logger zerolog.Logger, cfg *config.Client, serverPort uint16, sessi
 			serverHost:       cfg.ServerHost,
 			serverPort:       serverPort,
 			socketSendBuffer: 128, // For keep-alive packets
-			socketRecvBuffer: int(cfg.SocketRecvBuffer),
+			socketRecvBuffer: cfg.SocketRecvBuffer,
 			srcIP:            cfg.IP,
 			logger:           logger,
 		},
