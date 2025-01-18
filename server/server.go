@@ -99,6 +99,11 @@ func (s *Server) Run(ctx context.Context) error {
 	defer cancel()
 
 	var wg sync.WaitGroup
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -158,8 +163,6 @@ func (s *Server) Run(ctx context.Context) error {
 		s.logger.Error().Func(errutil.TreeLog(err)).Err(err).Msg("Server engine stopped due to unknown error")
 	}
 
-	cancel()
-	wg.Wait()
 	return nil
 }
 
