@@ -11,7 +11,7 @@ require (
 	github.com/miekg/dns v1.1.63
 	github.com/panjf2000/gnet/v2 v2.7.1
 	github.com/rs/zerolog v1.33.0
-	github.com/samber/lo v1.47.0
+	github.com/samber/lo v1.49.0
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
