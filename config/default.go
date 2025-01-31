@@ -15,12 +15,12 @@ const (
 	DefaultServerLogLevel               = zerolog.InfoLevel
 	DefaultClientLogLevel               = zerolog.InfoLevel
 	DefaultTunRingSize                  = 5
-	DefaultClientTunDeviceMTU           = 1420
-	DefaultBufferSize                   = 1420
+	DefaultClientTunDeviceMTU           = 1280
+	DefaultBufferSize                   = 1280
 	DefaultClientSocketRecvBuffer       = 2 * units.MiB
 	DefaultClientSocketSendBuffer       = 2 * units.MiB
 	DefaultServerMaxClients             = 10
-	DefaultServerNumEventLoops          = 16
+	DefaultServerNumEventLoops          = 0
 	DefaultServerCleanupTickIntervalSec = 5 * minute
 	DefaultKeepAliveSec                 = 11 * second
 	DefaultInactivityKeepAliveLimit     = 5
