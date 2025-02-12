@@ -62,7 +62,7 @@ tasks:
       vars:
         - OUT_FORMAT
     cmd: |-
-      go run \
+      go tool \
         github.com/golangci/golangci-lint/cmd/golangci-lint \
         run {{ if .FIX }}--fix {{ end }}\
         --print-resources-usage \

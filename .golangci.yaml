@@ -7,7 +7,6 @@ linters:
     - contextcheck
     - depguard
     - dupl
-    - exportloopref
     - forbidigo
     - forcetypeassert
     - funlen
