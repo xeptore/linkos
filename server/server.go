@@ -37,10 +37,10 @@ type (
 		subnetIPNet *net.IPNet
 		tick        time.Duration
 		clients     []Client
+		hostConns   []*ClientConnection
+		hostIP      net.IP
 		logger      zerolog.Logger
 	}
-	ClientPrivateIP  = string
-	LocalConnAddr    = string
 	Client           []*ClientConnection
 	ClientConnection struct {
 		Conn          io.WriteCloser
@@ -68,15 +68,25 @@ func New(logger zerolog.Logger, cfg *config.Server) (*Server, error) {
 
 	clients := make([]Client, config.DefaultServerMaxClients)
 	for i := range clients {
-		client := make([]*ClientConnection, len(config.DefaultClientRecvPorts))
+		client := make([]*ClientConnection, len(config.DefaultClientPorts))
 		clients[i] = client
-		for j := range len(config.DefaultClientRecvPorts) {
+		for j := range len(config.DefaultClientPorts) {
 			clients[i][j] = &ClientConnection{
 				Conn:          discard,
 				RemoteAddr:    "",
 				LastKeepAlive: time.Now().Unix(),
 				IsIdle:        true,
 			}
+		}
+	}
+
+	hostConns := make([]*ClientConnection, config.DefaultServerMaxClients-1)
+	for i := range hostConns {
+		hostConns[i] = &ClientConnection{
+			Conn:          discard,
+			RemoteAddr:    "",
+			LastKeepAlive: time.Now().Unix(),
+			IsIdle:        true,
 		}
 	}
 
@@ -89,6 +99,8 @@ func New(logger zerolog.Logger, cfg *config.Server) (*Server, error) {
 		subnetIPNet:        subnetIPNet,
 		tick:               config.DefaultServerCleanupTickIntervalSec * time.Second,
 		clients:            clients,
+		hostConns:          hostConns,
+		hostIP:             net.ParseIP(cfg.HostIP).To4(),
 		logger:             logger,
 	}
 	return server, nil
@@ -149,7 +161,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	protoAddrs := lo.Map(
-		slices.Concat(config.DefaultClientRecvPorts, config.DefaultClientSendPorts),
+		slices.Concat(config.DefaultHostPorts, config.DefaultClientPorts),
 		func(port uint16, _ int) string {
 			return "udp4://" + net.JoinHostPort(s.cfg.BindHost, strconv.Itoa(int(port)))
 		},
@@ -178,6 +190,7 @@ func (s *Server) OnBoot(eng gnet.Engine) gnet.Action {
 
 func (s *Server) OnTick() (time.Duration, gnet.Action) {
 	now := time.Now().Unix()
+
 	for clientIdx, clientConn := range s.clients {
 		for portIdx, conn := range clientConn {
 			if now-conn.LastKeepAlive > config.DefaultKeepAliveSec*config.DefaultInactivityKeepAliveLimit && !conn.IsIdle {
@@ -192,6 +205,20 @@ func (s *Server) OnTick() (time.Duration, gnet.Action) {
 			}
 		}
 	}
+
+	for portIdx, conn := range s.hostConns {
+		if now-conn.LastKeepAlive > config.DefaultKeepAliveSec*config.DefaultInactivityKeepAliveLimit && !conn.IsIdle {
+			conn.IsIdle = true
+			logger := s.logger.With().Int("port_idx", portIdx).Logger()
+			logger.Warn().Msg("Marked client as disconnected due to passing missed keep-alive threshold")
+			if err := conn.Conn.Close(); nil != err {
+				logger.Error().Func(errutil.TreeLog(err)).Err(err).Msg("Failed to close stale client connection")
+			} else {
+				logger.Debug().Msg("Closed stale client connection")
+			}
+		}
+	}
+
 	return s.tick, gnet.None
 }
 
@@ -247,78 +274,103 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 
 	now := time.Now().Unix()
 
-	if localPortIdx := slices.Index(config.DefaultClientSendPorts, localPort); localPortIdx != -1 {
-		switch {
-		case dstIP.Equal(s.gatewayIP):
-			logger.Debug().Msg("Handled client keep-alive packet")
-			return gnet.None
-		case dstIP.Equal(s.broadcastIP):
-			logger.Debug().Msg("Broadcasting packet")
-			for dstClientIdx, dstClient := range s.clients {
-				if clientIdx == dstClientIdx {
-					continue
+	switch {
+	case dstIP.Equal(s.gatewayIP):
+		// Only keep-alive packets should update the last keep-alive timestamp
+		if srcIP.Equal(s.hostIP) {
+			localPortIdx := slices.Index(config.DefaultHostPorts, localPort)
+			if remoteAddr := conn.RemoteAddr().String(); s.hostConns[localPortIdx].RemoteAddr != remoteAddr || s.hostConns[localPortIdx].IsIdle {
+				s.hostConns[localPortIdx] = &ClientConnection{
+					Conn:          conn,
+					RemoteAddr:    remoteAddr,
+					LastKeepAlive: now,
+					IsIdle:        false,
 				}
-				logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-				sign := mathutil.RandomSign()
-				for i := range len(config.DefaultClientRecvPorts) {
-					dstPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
-					dstConn := dstClient[dstPortIdx]
-					if dstConn.IsIdle {
-						logger.Debug().Int("dst_local_port", dstPortIdx).Msg("Skipping idle client connection")
-						continue
-					}
-					logger = logger.With().Int("dst_local_port", dstPortIdx).Logger()
-					logger.Debug().Msg("Forwarding broadcast packet to client")
-					err := retry.Do(func(attempt int) retry.Action {
-						if written, err := dstConn.Conn.Write(packet); nil != err {
-							if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
-								if attempt > 3 {
-									return retry.Fail(fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt))
-								}
-								time.Sleep(time.Duration(attempt) * 65 * time.Millisecond)
-								return retry.Retry()
-							}
-							return retry.Fail(err)
-						} else if written != len(packet) {
-							return retry.Fail(fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written))
-						}
-						return retry.Success()
-					})
-					if nil != err {
-						logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
-					} else {
-						logger.Debug().Msg("Forwarded broadcast packet to client")
-					}
-					break
-				}
+			} else {
+				s.hostConns[localPortIdx].LastKeepAlive = now
 			}
-			return gnet.None
-		default:
-			logger.Debug().Msg("Forwarding packet")
-			dstClientIdx := clientIdxFromIP(dstIP)
-			if dstClientIdx >= len(s.clients) {
-				logger.Debug().Int("dst_client_idx", dstClientIdx).Msg("Ignoring packet with out of range destination client index")
-				return gnet.None
+		} else {
+			localPortIdx := slices.Index(config.DefaultClientPorts, localPort)
+			if remoteAddr := conn.RemoteAddr().String(); s.clients[clientIdx][localPortIdx].RemoteAddr != remoteAddr || s.clients[clientIdx][localPortIdx].IsIdle {
+				s.clients[clientIdx][localPortIdx] = &ClientConnection{
+					Conn:          conn,
+					RemoteAddr:    remoteAddr,
+					LastKeepAlive: now,
+					IsIdle:        false,
+				}
+			} else {
+				s.clients[clientIdx][localPortIdx].LastKeepAlive = now
+			}
+		}
+	case dstIP.Equal(s.hostIP):
+		err := retry.Do(func(attempt int) retry.Action {
+			if written, err := s.hostConns[clientHostConnIndex(srcIP)].Conn.Write(packet); nil != err {
+				if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+					if attempt > 3 {
+						return retry.Fail(fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt))
+					}
+					time.Sleep(time.Duration(attempt) * 17 * time.Millisecond)
+					return retry.Retry()
+				}
+				return retry.Fail(err)
+			} else if written != len(packet) {
+				return retry.Fail(fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written))
+			}
+			return retry.Success()
+		})
+		if nil != err {
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
+		} else {
+			logger.Debug().Msg("Forwarded broadcast packet to destined client")
+		}
+	case dstIP.Equal(s.broadcastIP):
+		if !srcIP.Equal(s.hostIP) {
+			// Packet sent by a client should also be forwarded to the host
+			err := retry.Do(func(attempt int) retry.Action {
+				if written, err := s.hostConns[clientHostConnIndex(srcIP)].Conn.Write(packet); nil != err {
+					if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+						if attempt > 3 {
+							return retry.Fail(fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt))
+						}
+						time.Sleep(time.Duration(attempt) * 17 * time.Millisecond)
+						return retry.Retry()
+					}
+					return retry.Fail(err)
+				} else if written != len(packet) {
+					return retry.Fail(fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written))
+				}
+				return retry.Success()
+			})
+			if nil != err {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
+			} else {
+				logger.Debug().Msg("Forwarded broadcast packet to destined client")
+			}
+		}
+
+		localPortIdx := slices.Index(config.DefaultClientPorts, localPort)
+		for dstClientIdx, dstClient := range s.clients {
+			if clientIdx == dstClientIdx {
+				continue
 			}
 			logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-			dstClient := s.clients[dstClientIdx]
 			sign := mathutil.RandomSign()
-			for i := range len(config.DefaultClientRecvPorts) {
-				dstLocalPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientRecvPorts)
-				dstConn := dstClient[dstLocalPortIdx]
+			for i := range len(config.DefaultClientPorts) {
+				dstPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientPorts)
+				dstConn := dstClient[dstPortIdx]
 				if dstConn.IsIdle {
-					logger.Debug().Int("dst_local_port_idx", dstLocalPortIdx).Msg("Skipping idle client connection")
+					logger.Debug().Int("dst_local_port", dstPortIdx).Msg("Skipping idle client connection")
 					continue
 				}
-				logger = logger.With().Int("dst_local_port_idx", dstLocalPortIdx).Logger()
-				logger.Debug().Msg("Forwarding packet to client")
+				logger = logger.With().Int("dst_local_port", dstPortIdx).Logger()
+				logger.Debug().Msg("Forwarding broadcast packet to client")
 				err := retry.Do(func(attempt int) retry.Action {
 					if written, err := dstConn.Conn.Write(packet); nil != err {
 						if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
 							if attempt > 3 {
 								return retry.Fail(fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt))
 							}
-							time.Sleep(time.Duration(attempt) * 65 * time.Millisecond)
+							time.Sleep(time.Duration(attempt) * 17 * time.Millisecond)
 							return retry.Retry()
 						}
 						return retry.Fail(err)
@@ -330,31 +382,60 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				if nil != err {
 					logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
 				} else {
-					logger.Debug().Msg("Forwarded broadcast packet to client")
+					logger.Debug().Msg("Forwarded broadcast packet to destined client")
 				}
 				break
 			}
+		}
+	default:
+		// Client-to-client packet
+		dstClientIdx := clientIdxFromIP(dstIP)
+		if dstClientIdx >= len(s.clients) {
+			logger.Debug().Int("dst_client_idx", dstClientIdx).Msg("Ignoring packet with out of range destination client index")
 			return gnet.None
 		}
-	} else if localPortIdx := slices.Index(config.DefaultClientRecvPorts, localPort); localPortIdx != -1 {
-		if remoteAddr := conn.RemoteAddr().String(); s.clients[clientIdx][localPortIdx].RemoteAddr != remoteAddr || s.clients[clientIdx][localPortIdx].IsIdle {
-			s.clients[clientIdx][localPortIdx] = &ClientConnection{
-				Conn:          conn,
-				RemoteAddr:    remoteAddr,
-				LastKeepAlive: now,
-				IsIdle:        false,
+		localPortIdx := slices.Index(config.DefaultClientPorts, localPort)
+		sign := mathutil.RandomSign()
+		for i := range len(config.DefaultClientPorts) {
+			dstPortIdx := (int(now) + dstClientIdx + localPortIdx + (i * sign)) % len(config.DefaultClientPorts)
+			dstConn := s.clients[dstClientIdx][dstPortIdx]
+			if dstConn.IsIdle {
+				logger.Debug().Int("dst_local_port", dstPortIdx).Msg("Skipping idle client connection")
+				continue
 			}
-		} else {
-			s.clients[clientIdx][localPortIdx].LastKeepAlive = now
+			logger = logger.With().Int("dst_local_port", dstPortIdx).Logger()
+			logger.Debug().Msg("Forwarding broadcast packet to client")
+			err := retry.Do(func(attempt int) retry.Action {
+				if written, err := dstConn.Conn.Write(packet); nil != err {
+					if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+						if attempt > 3 {
+							return retry.Fail(fmt.Errorf("server: failed to write packet as buffer is temporarily unavailable after %d attempts", attempt))
+						}
+						time.Sleep(time.Duration(attempt) * 17 * time.Millisecond)
+						return retry.Retry()
+					}
+					return retry.Fail(err)
+				} else if written != len(packet) {
+					return retry.Fail(fmt.Errorf("server: expected to write entire %d bytes of packet, written: %d", len(packet), written))
+				}
+				return retry.Success()
+			})
+			if nil != err {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
+			} else {
+				logger.Debug().Msg("Forwarded broadcast packet to destined client")
+			}
+			break
 		}
-		return gnet.None
-	} else {
-		logger.Debug().Msg("Ignoring packet with invalid port")
-		return gnet.Close
 	}
+	return gnet.None
 }
 
 func clientIdxFromIP(ip net.IP) int {
+	return int(ip[3] - 2)
+}
+
+func clientHostConnIndex(ip net.IP) int {
 	return int(ip[3] - 2)
 }
 
