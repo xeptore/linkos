@@ -314,7 +314,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		if nil != err {
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
 		} else {
-			logger.Debug().Msg("Forwarded broadcast packet to destined client")
+			logger.Debug().Msg("Forwarded packet to host")
 		}
 	case dstIP.Equal(s.broadcastIP):
 		if !srcIP.Equal(s.hostIP) {
@@ -337,7 +337,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			if nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
 			} else {
-				logger.Debug().Msg("Forwarded broadcast packet to destined client")
+				logger.Debug().Msg("Forwarded broadcast packet to host")
 			}
 		}
 
@@ -346,7 +346,6 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				continue
 			}
 			logger = logger.With().Int("dst_client_idx", dstClientIdx).Logger()
-			logger.Debug().Msg("Forwarding broadcast packet to client")
 			err := retry.Do(func(attempt int) retry.Action {
 				if written, err := dstConn.Conn.Write(packet); nil != err {
 					if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
@@ -365,7 +364,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			if nil != err {
 				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
 			} else {
-				logger.Debug().Msg("Forwarded broadcast packet to destined client")
+				logger.Debug().Msg("Forwarded broadcast packet to client")
 			}
 		}
 	default:
@@ -395,7 +394,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 		if nil != err {
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to write packet")
 		} else {
-			logger.Debug().Msg("Forwarded broadcast packet to destined client")
+			logger.Debug().Msg("Forwarded packet to destined client")
 		}
 	}
 	return gnet.None
