@@ -268,33 +268,34 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 
 	now := time.Now().Unix()
 
+	if srcIP.Equal(s.hostIP) {
+		localPortIdx := slices.Index(config.DefaultHostPorts, localPort)
+		if remoteAddr := conn.RemoteAddr().String(); s.hostConns[localPortIdx].RemoteAddr != remoteAddr || s.hostConns[localPortIdx].IsIdle {
+			s.hostConns[localPortIdx] = &ClientConnection{
+				Conn:          conn,
+				RemoteAddr:    remoteAddr,
+				LastKeepAlive: now,
+				IsIdle:        false,
+			}
+		} else {
+			s.hostConns[localPortIdx].LastKeepAlive = now
+		}
+	} else {
+		if remoteAddr := conn.RemoteAddr().String(); s.clientConns[clientIdx].RemoteAddr != remoteAddr || s.clientConns[clientIdx].IsIdle {
+			s.clientConns[clientIdx] = &ClientConnection{
+				Conn:          conn,
+				RemoteAddr:    remoteAddr,
+				LastKeepAlive: now,
+				IsIdle:        false,
+			}
+		} else {
+			s.clientConns[clientIdx].LastKeepAlive = now
+		}
+	}
+
 	switch {
 	case dstIP.Equal(s.gatewayIP):
 		// Only keep-alive packets should update the last keep-alive timestamp
-		if srcIP.Equal(s.hostIP) {
-			localPortIdx := slices.Index(config.DefaultHostPorts, localPort)
-			if remoteAddr := conn.RemoteAddr().String(); s.hostConns[localPortIdx].RemoteAddr != remoteAddr || s.hostConns[localPortIdx].IsIdle {
-				s.hostConns[localPortIdx] = &ClientConnection{
-					Conn:          conn,
-					RemoteAddr:    remoteAddr,
-					LastKeepAlive: now,
-					IsIdle:        false,
-				}
-			} else {
-				s.hostConns[localPortIdx].LastKeepAlive = now
-			}
-		} else {
-			if remoteAddr := conn.RemoteAddr().String(); s.clientConns[clientIdx].RemoteAddr != remoteAddr || s.clientConns[clientIdx].IsIdle {
-				s.clientConns[clientIdx] = &ClientConnection{
-					Conn:          conn,
-					RemoteAddr:    remoteAddr,
-					LastKeepAlive: now,
-					IsIdle:        false,
-				}
-			} else {
-				s.clientConns[clientIdx].LastKeepAlive = now
-			}
-		}
 		logger.Debug().Msg("Received keep-alive packet")
 	case dstIP.Equal(s.hostIP):
 		err := retry.Do(func(attempt int) retry.Action {
