@@ -260,12 +260,6 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 	logger = logger.With().Str("src_ip", srcIP.String()).Str("dst_ip", dstIP.String()).Logger()
 	logger.Debug().Msg("Received packet")
 
-	clientIdx := clientIdxFromIP(srcIP)
-	if clientIdx < 0 || clientIdx >= len(s.clientConns) {
-		s.logger.Debug().Int("client_idx", clientIdx).Msg("Ignoring packet with out of range client index")
-		return gnet.None
-	}
-
 	now := time.Now().Unix()
 
 	if srcIP.Equal(s.hostIP) {
@@ -281,6 +275,11 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			s.hostConns[localPortIdx].LastKeepAlive = now
 		}
 	} else {
+		clientIdx := clientIdxFromIP(srcIP)
+		if clientIdx < 0 || clientIdx >= len(s.clientConns) {
+			s.logger.Debug().Int("client_idx", clientIdx).Msg("Ignoring packet with out of range client index")
+			return gnet.None
+		}
 		if remoteAddr := conn.RemoteAddr().String(); s.clientConns[clientIdx].RemoteAddr != remoteAddr || s.clientConns[clientIdx].IsIdle {
 			s.clientConns[clientIdx] = &ClientConnection{
 				Conn:          conn,
@@ -319,6 +318,12 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			logger.Debug().Msg("Forwarded packet to host")
 		}
 	case dstIP.Equal(s.broadcastIP):
+		clientIdx := clientIdxFromIP(srcIP)
+		if clientIdx < 0 || clientIdx >= len(s.clientConns) {
+			s.logger.Debug().Int("client_idx", clientIdx).Msg("Ignoring packet with out of range client index")
+			return gnet.None
+		}
+
 		if !srcIP.Equal(s.hostIP) {
 			// Packet sent by a client should also be forwarded to the host over sender client's specific connection
 			err := retry.Do(func(attempt int) retry.Action {
