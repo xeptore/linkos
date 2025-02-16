@@ -295,6 +295,7 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 				s.clientConns[clientIdx].LastKeepAlive = now
 			}
 		}
+		logger.Debug().Msg("Received keep-alive packet")
 	case dstIP.Equal(s.hostIP):
 		err := retry.Do(func(attempt int) retry.Action {
 			if written, err := s.hostConns[clientHostConnIndex(srcIP)].Conn.Write(packet); nil != err {
