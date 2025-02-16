@@ -7,10 +7,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/google/gopacket"
@@ -23,6 +23,7 @@ import (
 	"github.com/xeptore/linkos/errutil"
 	"github.com/xeptore/linkos/iputil"
 	"github.com/xeptore/linkos/netutil"
+	"github.com/xeptore/linkos/pool"
 )
 
 type common struct {
@@ -30,25 +31,27 @@ type common struct {
 	serverPort       uint16
 	socketSendBuffer int
 	socketRecvBuffer int
+	bufferSize       int
+	sessionWriter    io.Writer
+	sessionReader    <-chan *pool.Packet
 	srcIP            net.IP
 	logger           zerolog.Logger
 }
 
-func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UDPConn) {
-	defer wg.Done()
+func (w *common) keepAlive(ctx context.Context, conn *net.UDPConn) error {
 	logger := w.logger.With().Str("worker", "keep_alive").Logger()
 
 	gatewayIP, err := iputil.GatewayIP(w.srcIP, 24)
 	if nil != err {
 		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to calculate gatewat IP address from client IP address")
-		return
+		return err
 	}
 	logger = logger.With().Str("gateway_ip", gatewayIP.String()).Logger()
 
 	packetBytes, err := newKeepAlivePacket(w.srcIP, gatewayIP)
 	if nil != err {
 		logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to craft keep-alive packet")
-		return
+		return err
 	}
 
 	tick := time.Tick(config.DefaultKeepAliveSec * time.Second)
@@ -58,20 +61,20 @@ func (w *common) keepAlive(ctx context.Context, wg *sync.WaitGroup, conn *net.UD
 		select {
 		case <-ctx.Done():
 			logger.Trace().Msg("Finishing keep-alive loop due to context cancellation")
-			return
+			return ctx.Err()
 		case <-initialTick:
 			if err := writeKeepAlivePacket(logger, packetBytes, conn); nil != err {
-				return
+				return err
 			}
 		case <-tick:
 			if err := writeKeepAlivePacket(logger, packetBytes, conn); nil != err {
-				return
+				return err
 			}
 		}
 	}
 }
 
-// credit goes to https://devv.ai
+// Credit goes to https://devv.ai
 func newKeepAlivePacket(src, dst net.IP) ([]byte, error) {
 	header := &ipv4.Header{ //nolint:exhaustruct
 		Version:  ipv4.Version,
@@ -216,7 +219,7 @@ func (w *common) connect(ctx context.Context) (*net.UDPConn, error) {
 		}
 	}
 
-	w.logger.Info().Str("server_ip", serverIP.String()).Msg("Resolving server UDP address using IP address")
+	w.logger.Info().Str("server_ip", serverIP.String()).Uint16("server_port", w.serverPort).Msg("Resolving server UDP address using IP address")
 	serverAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(serverIP.String(), strconv.Itoa(int(w.serverPort))))
 	if nil != err {
 		return nil, fmt.Errorf("worker: failed to resolve server address: %v", err)

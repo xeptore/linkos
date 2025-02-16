@@ -12,23 +12,21 @@ const (
 )
 
 const (
-	DefaultServerLogLevel               = zerolog.InfoLevel
-	DefaultClientLogLevel               = zerolog.InfoLevel
-	DefaultTunRingSize                  = 5
-	DefaultClientTunDeviceMTU           = 1280
-	DefaultBufferSize                   = 1280
-	DefaultClientSocketRecvBuffer       = 2 * units.MiB
-	DefaultClientSocketSendBuffer       = 2 * units.MiB
-	DefaultServerMaxClients             = 10
-	DefaultServerNumEventLoops          = 0
-	DefaultServerCleanupTickIntervalSec = 5 * minute
-	DefaultKeepAliveSec                 = 11 * second
-	DefaultInactivityKeepAliveLimit     = 5
-	DefaultServerSocketRecvBufferSize   = 4 * units.MiB
-	DefaultServerSocketSendBufferSize   = 4 * units.MiB
+	DefaultServerLogLevel                      = zerolog.InfoLevel
+	DefaultClientLogLevel                      = zerolog.InfoLevel
+	DefaultTunRingSize                         = 2
+	DefaultClientTunDeviceMTU                  = 1280
+	DefaultBufferSize                          = 1280
+	DefaultClientSocketRecvBuffer              = 2 * units.MiB
+	DefaultClientSocketSendBuffer              = 2 * units.MiB
+	DefaultServerMaxClients             uint16 = 9
+	DefaultServerNumEventLoops                 = 0
+	DefaultServerCleanupTickIntervalSec        = 5 * minute
+	DefaultKeepAliveSec                        = 16 * second
+	DefaultInactivityKeepAliveLimit            = 5
+	DefaultServerSocketRecvBufferSize          = 4 * units.MiB
+	DefaultServerSocketSendBufferSize          = 4 * units.MiB
+	ClientBasePort                      uint16 = 15629
 )
 
-var (
-	DefaultClientSendPorts = []uint16{48931, 52342}
-	DefaultClientRecvPorts = []uint16{47556, 52811}
-)
+var DefaultHostPorts = []uint16{59989, 4937, 20573, 24525, 22163, 18151, 14526, 55599, 46539}

@@ -24,6 +24,7 @@ type Server struct {
 	BindHost         string
 	BindDev          string
 	IPNet            string
+	HostIP           string
 	NumEventLoops    int
 	SocketRecvBuffer int
 	SocketSendBuffer int
@@ -37,6 +38,7 @@ func (s *Server) LogDict() *zerolog.Event {
 		Str("bind_host", s.BindHost).
 		Str("bind_dev", s.BindDev).
 		Str("ip_net", s.IPNet).
+		Str("host_ip", s.HostIP).
 		Int("num_event_loops", s.NumEventLoops).
 		Int("socket_recv_buffer", s.SocketRecvBuffer).
 		Int("socket_send_buffer", s.SocketSendBuffer).
@@ -65,6 +67,7 @@ func LoadServer(filename string) (*Server, error) {
 
 	bindHost := strings.TrimSpace(cfg.Section("").Key("bind_host").String())
 	bindDev := strings.TrimSpace(cfg.Section("").Key("bind_dev").String())
+	hostIP := strings.TrimSpace(cfg.Section("").Key("host_ip").String())
 	ipNet := strings.TrimSpace(cfg.Section("").Key("ip_net").String())
 	logLevel := strings.TrimSpace(cfg.Section("").Key("log_level").String())
 
@@ -108,6 +111,7 @@ func LoadServer(filename string) (*Server, error) {
 		BindHost:         bindHost,
 		BindDev:          bindDev,
 		IPNet:            ipNet,
+		HostIP:           hostIP,
 		NumEventLoops:    numEventLoops,
 		SocketRecvBuffer: socketRecvBuffer,
 		SocketSendBuffer: socketSendBuffer,
@@ -141,6 +145,10 @@ func (s *Server) validate() error {
 
 	if len(s.BindDev) == 0 {
 		return errors.New("config: bind_dev is required")
+	}
+
+	if ip := net.ParseIP(s.HostIP); ip == nil || ip.To4() == nil {
+		return errors.New("config: host_ip is not a valid IP address")
 	}
 
 	if len(s.IPNet) == 0 {

@@ -7,37 +7,37 @@ import (
 	"errors"
 	"io"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
+	"github.com/xeptore/linkos/pool"
 )
 
-type Recv struct {
+type Host struct {
 	common
-	bufferSize int
-	session    io.Writer
 }
 
-func NewRecv(logger zerolog.Logger, cfg *config.Client, serverPort uint16, session io.Writer) *Recv {
-	return &Recv{
-		session:    session,
-		bufferSize: cfg.BufferSize,
+func NewHost(logger zerolog.Logger, cfg *config.Client, serverPort uint16, sessionWriter io.Writer, sessionReader <-chan *pool.Packet) *Host {
+	return &Host{
 		common: common{
 			serverHost:       cfg.ServerHost,
 			serverPort:       serverPort,
-			socketSendBuffer: 128, // For keep-alive packets
+			socketSendBuffer: cfg.SocketSendBuffer,
 			socketRecvBuffer: cfg.SocketRecvBuffer,
+			bufferSize:       cfg.BufferSize,
+			sessionWriter:    sessionWriter,
+			sessionReader:    sessionReader,
 			srcIP:            cfg.IP,
 			logger:           logger,
 		},
 	}
 }
 
-func (w *Recv) Run(ctx context.Context) error {
+func (w *Host) Run(ctx context.Context) error {
 	var connectFailedAttempts int
 	for {
 		conn, err := w.connect(ctx)
@@ -59,19 +59,10 @@ func (w *Recv) Run(ctx context.Context) error {
 	}
 }
 
-func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
-	var wg sync.WaitGroup
+func (w *Host) run(ctx context.Context, conn *net.UDPConn) (err error) {
+	eg, ctx := errgroup.WithContext(ctx)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		cancel()
-		wg.Wait()
-	}()
-
-	wg.Add(1)
-	go func() { // Close connection on context cancellation
-		defer wg.Done()
-
+	eg.Go(func() error { // Close connection on context cancellation
 		<-ctx.Done()
 		w.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
 		if err := conn.Close(); nil != err {
@@ -81,17 +72,22 @@ func (w *Recv) run(ctx context.Context, conn *net.UDPConn) error {
 		} else {
 			w.logger.Trace().Msg("Closed tunnel connection due to parent context closure")
 		}
-	}()
+		return nil
+	})
 
-	wg.Add(1)
-	go w.keepAlive(ctx, &wg, conn)
+	eg.Go(func() error { return w.keepAlive(ctx, conn) })
+	eg.Go(func() error { return w.handleInbound(ctx, conn) })
+	eg.Go(func() error { return w.handleOutbound(ctx, conn) })
 
-	return w.handleInbound(conn)
+	if err := eg.Wait(); nil != err {
+		return err
+	}
+	return nil
 }
 
-func (w *Recv) handleInbound(conn *net.UDPConn) error {
+func (w *Host) handleInbound(ctx context.Context, conn *net.UDPConn) error {
 	var (
-		logger = w.logger.With().Str("worker", "incoming").Logger()
+		logger = w.logger.With().Str("worker", "inbound").Logger()
 		buffer = make([]byte, w.bufferSize)
 	)
 	for {
@@ -106,15 +102,38 @@ func (w *Recv) handleInbound(conn *net.UDPConn) error {
 		}
 		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
 
-		written, err := w.session.Write(buffer[:n])
+		written, err := w.sessionWriter.Write(buffer[:n])
 		switch {
 		case nil != err:
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error writing to TUN device")
+			if err := ctx.Err(); nil != err {
+				// TUN device is expected to already been closed due to context cancellation.
+				// Hence, this should be treated as a clean exit, which will be handled by the caller.
+				return err
+			}
 			return err
 		case written != n:
 			logger.Error().Int("written", written).Int("expected", n).Msg("Failed to write all bytes to TUN device")
 		default:
 			logger.Trace().Int("bytes", n).Msg("Incoming packet has been written to TUN device")
+		}
+	}
+}
+
+func (w *Host) handleOutbound(ctx context.Context, conn *net.UDPConn) error {
+	logger := w.logger.With().Str("worker", "outbound").Logger()
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Trace().Msg("Finishing worker due to context cancellation")
+			return ctx.Err()
+		case packet := <-w.sessionReader:
+			if packet == nil {
+				return nil
+			}
+			if err := sendAndReleasePacket(w.logger, conn, packet); nil != err {
+				return err
+			}
 		}
 	}
 }

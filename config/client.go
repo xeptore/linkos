@@ -18,6 +18,7 @@ import (
 type Client struct {
 	ServerHost       string
 	IP               net.IP
+	IsHost           bool
 	RingSize         uint32
 	BufferSize       int
 	SocketRecvBuffer int
@@ -32,6 +33,7 @@ func (c *Client) LogDict() *zerolog.Event {
 		Dict().
 		Str("server_host", c.ServerHost).
 		Str("ip", c.IP.String()).
+		Bool("is_host", c.IsHost).
 		Int("buffer_size", c.BufferSize).
 		Int("socket_send_buffer", c.SocketSendBuffer).
 		Int("socket_recv_buffer", c.SocketRecvBuffer).
@@ -113,6 +115,17 @@ func LoadClient(filename string) (*Client, error) {
 		return nil, errors.New("config: ip is not a valid IP address")
 	}
 
+	var isHost bool
+	if isHostStr := strings.TrimSpace(cfg.Section("").Key("is_host").String()); len(isHostStr) != 0 {
+		switch isHostStr {
+		case "0":
+		case "1":
+			isHost = true
+		default:
+			return nil, errors.New("config: is_host can only be 0 or 1")
+		}
+	}
+
 	logLevel := DefaultClientLogLevel
 	if logLevelStr := strings.TrimSpace(cfg.Section("").Key("log_level").String()); logLevelStr != "" {
 		if lvl, err := zerolog.ParseLevel(logLevelStr); nil != err {
@@ -141,7 +154,8 @@ func LoadClient(filename string) (*Client, error) {
 
 	out := Client{
 		ServerHost:       serverHost,
-		IP:               net.ParseIP(ip),
+		IP:               net.ParseIP(ip).To4(),
+		IsHost:           isHost,
 		RingSize:         ringSize,
 		BufferSize:       bufferSize,
 		SocketRecvBuffer: socketRecvBuffer,

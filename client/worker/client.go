@@ -5,11 +5,12 @@ package worker
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/xeptore/linkos/config"
 	"github.com/xeptore/linkos/errutil"
@@ -17,26 +18,27 @@ import (
 	"github.com/xeptore/linkos/pool"
 )
 
-type Send struct {
+type Client struct {
 	common
-	sessionReader <-chan *pool.Packet
 }
 
-func NewSend(logger zerolog.Logger, cfg *config.Client, serverPort uint16, sessionReader <-chan *pool.Packet) *Send {
-	return &Send{
-		sessionReader: sessionReader,
+func NewClient(logger zerolog.Logger, cfg *config.Client, sessionWriter io.Writer, sessionReader <-chan *pool.Packet) *Client {
+	return &Client{
 		common: common{
 			serverHost:       cfg.ServerHost,
-			serverPort:       serverPort,
+			serverPort:       config.ClientBasePort + uint16(cfg.IP[3]) - 2,
 			socketSendBuffer: cfg.SocketSendBuffer,
-			socketRecvBuffer: 0, // Nothing is expected to be received on this socket
+			socketRecvBuffer: cfg.SocketRecvBuffer,
+			bufferSize:       cfg.BufferSize,
+			sessionWriter:    sessionWriter,
+			sessionReader:    sessionReader,
 			srcIP:            cfg.IP,
 			logger:           logger,
 		},
 	}
 }
 
-func (w *Send) Run(ctx context.Context) error {
+func (w *Client) Run(ctx context.Context) error {
 	var connectFailedAttempts int
 	for {
 		conn, err := w.connect(ctx)
@@ -58,19 +60,10 @@ func (w *Send) Run(ctx context.Context) error {
 	}
 }
 
-func (w *Send) run(ctx context.Context, conn *net.UDPConn) error {
-	var wg sync.WaitGroup
+func (w *Client) run(ctx context.Context, conn *net.UDPConn) (err error) {
+	eg, ctx := errgroup.WithContext(ctx)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		cancel()
-		wg.Wait()
-	}()
-
-	wg.Add(1)
-	go func() { // Close connection on context cancellation
-		defer wg.Done()
-
+	eg.Go(func() error { // Close connection on context cancellation
 		<-ctx.Done()
 		w.logger.Trace().Msg("Closing tunnel connection due to parent context closure")
 		if err := conn.Close(); nil != err {
@@ -80,27 +73,65 @@ func (w *Send) run(ctx context.Context, conn *net.UDPConn) error {
 		} else {
 			w.logger.Trace().Msg("Closed tunnel connection due to parent context closure")
 		}
-	}()
+		return nil
+	})
+	eg.Go(func() error { return w.keepAlive(ctx, conn) })
+	eg.Go(func() error { return w.handleInbound(ctx, conn) })
+	eg.Go(func() error { return w.handleOutbound(ctx, conn) })
 
-	wg.Add(1)
-	go w.keepAlive(ctx, &wg, conn)
-
-	wg.Add(1)
-	go w.handleInbound(&wg, conn)
-
-	return w.handleOutbound(ctx, conn)
+	if err := eg.Wait(); nil != err {
+		return err
+	}
+	return nil
 }
 
-func (w *Send) handleOutbound(ctx context.Context, conn *net.UDPConn) error {
+func (w *Client) handleInbound(ctx context.Context, conn *net.UDPConn) error {
+	var (
+		logger = w.logger.With().Str("worker", "inbound").Logger()
+		buffer = make([]byte, w.bufferSize)
+	)
+	for {
+		n, err := conn.Read(buffer)
+		if nil != err {
+			if errors.Is(err, net.ErrClosed) {
+				logger.Trace().Msg("Ending server tunnel worker due to connection closure")
+			} else {
+				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error receiving data from server tunnel")
+			}
+			return err
+		}
+		logger.Trace().Int("bytes", n).Msg("Received bytes from server tunnel")
+
+		written, err := w.sessionWriter.Write(buffer[:n])
+		switch {
+		case nil != err:
+			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Error writing to TUN device")
+			if err := ctx.Err(); nil != err {
+				// TUN device is expected to already been closed due to context cancellation.
+				// Hence, this should be treated as a clean exit, which will be handled by the caller.
+				return err
+			}
+			return err
+		case written != n:
+			logger.Error().Int("written", written).Int("expected", n).Msg("Failed to write all bytes to TUN device")
+		default:
+			logger.Trace().Int("bytes", n).Msg("Incoming packet has been written to TUN device")
+		}
+	}
+}
+
+func (w *Client) handleOutbound(ctx context.Context, conn *net.UDPConn) error {
+	logger := w.logger.With().Str("worker", "outbound").Logger()
 	for {
 		select {
 		case <-ctx.Done():
+			logger.Trace().Msg("Finishing worker due to context cancellation")
 			return ctx.Err()
 		case packet := <-w.sessionReader:
 			if packet == nil {
 				return nil
 			}
-			if err := sendAndReleasePacket(w.logger, conn, packet); nil != err {
+			if err := sendAndReleasePacket(logger, conn, packet); nil != err {
 				return err
 			}
 		}
@@ -136,22 +167,4 @@ func sendAndReleasePacket(logger zerolog.Logger, conn *net.UDPConn, p *pool.Pack
 		logger.Trace().Int("bytes", written).Msg("Outgoing packet has been written to tunnel connection")
 	}
 	return nil
-}
-
-func (w *Send) handleInbound(wg *sync.WaitGroup, conn *net.UDPConn) {
-	defer wg.Done()
-
-	logger := w.logger.With().Str("worker", "incoming").Logger()
-	for {
-		n, err := conn.Read([]byte{})
-		if nil != err {
-			if !errors.Is(err, net.ErrClosed) {
-				logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to discard incoming packet")
-			}
-			return
-		} else {
-			logger.Trace().Int("bytes", n).Msg("Incoming packet has been discarded")
-		}
-		continue
-	}
 }

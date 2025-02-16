@@ -65,21 +65,22 @@ func (c *Client) run(ctx context.Context) error {
 
 	for {
 		eg, egCtx := errgroup.WithContext(ctx)
-		for idx, port := range config.DefaultClientRecvPorts {
-			w := worker.NewRecv(
-				c.logger.With().Str("kind", "recv").Int("worker_id", idx).Logger(),
+		if c.cfg.IsHost {
+			for idx, port := range config.DefaultHostPorts {
+				w := worker.NewHost(
+					c.logger.With().Int("worker_id", idx).Logger(),
+					c.cfg,
+					port,
+					session,
+					reader.Packets,
+				)
+				eg.Go(func() error { return w.Run(egCtx) })
+			}
+		} else {
+			w := worker.NewClient(
+				c.logger.With().Logger(),
 				c.cfg,
-				port,
 				session,
-			)
-			eg.Go(func() error { return w.Run(egCtx) })
-		}
-
-		for idx, port := range config.DefaultClientSendPorts {
-			w := worker.NewSend(
-				c.logger.With().Str("kind", "send").Int("worker_id", idx).Logger(),
-				c.cfg,
-				port,
 				reader.Packets,
 			)
 			eg.Go(func() error { return w.Run(egCtx) })
