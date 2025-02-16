@@ -376,7 +376,6 @@ func (s *Server) OnTraffic(conn gnet.Conn) gnet.Action {
 			return gnet.None
 		}
 		dstConn := s.clientConns[dstClientIdx]
-		logger.Debug().Msg("Forwarding broadcast packet to client")
 		err := retry.Do(func(attempt int) retry.Action {
 			if written, err := dstConn.Conn.Write(packet); nil != err {
 				if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
