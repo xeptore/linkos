@@ -22,7 +22,7 @@ const (
 	DefaultServerMaxClients             uint16 = 9
 	DefaultServerNumEventLoops                 = 0
 	DefaultServerCleanupTickIntervalSec        = 5 * minute
-	DefaultKeepAliveSec                        = 16 * second
+	DefaultKeepAliveSec                        = 13 * second
 	DefaultInactivityKeepAliveLimit            = 5
 	DefaultServerSocketRecvBufferSize          = 4 * units.MiB
 	DefaultServerSocketSendBufferSize          = 4 * units.MiB
