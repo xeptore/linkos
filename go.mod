@@ -25,7 +25,7 @@ require (
 require (
 	4d63.com/gocheckcompilerdirectives v1.2.1 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
-	github.com/4meepo/tagalign v1.4.1 // indirect
+	github.com/4meepo/tagalign v1.4.2 // indirect
 	github.com/Abirdcfly/dupword v0.1.3 // indirect
 	github.com/Antonboom/errname v1.0.0 // indirect
 	github.com/Antonboom/nilnil v1.0.1 // indirect
@@ -135,7 +135,7 @@ require (
 	github.com/nakabonne/nestif v0.3.1 // indirect
 	github.com/nishanths/exhaustive v0.12.0 // indirect
 	github.com/nishanths/predeclared v0.2.2 // indirect
-	github.com/nunnatsa/ginkgolinter v0.19.0 // indirect
+	github.com/nunnatsa/ginkgolinter v0.19.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/panjf2000/ants/v2 v2.11.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
@@ -170,7 +170,7 @@ require (
 	github.com/sourcegraph/go-diff v0.7.0 // indirect
 	github.com/spf13/afero v1.12.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/spf13/cobra v1.9.0 // indirect
+	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
