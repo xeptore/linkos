@@ -41,8 +41,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
-          check-latest: false
+          cache: true
+          check-latest: true
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         id: msys2
@@ -51,7 +51,7 @@ jobs:
           location: D:\msys2
           update: true
           release: true
-          cache: false
+          cache: true
           install: base-devel mingw-w64-clang-x86_64-clang
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -74,8 +74,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
-          check-latest: false
+          cache: true
+          check-latest: true
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
@@ -97,8 +97,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
-          check-latest: false
+          cache: true
+          check-latest: true
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         id: msys2
@@ -107,7 +107,7 @@ jobs:
           location: D:\msys2
           update: true
           release: true
-          cache: false
+          cache: true
           install: base-devel mingw-w64-clang-x86_64-clang unzip mingw-w64-clang-x86_64-imagemagick git
       - name: Get Clang Path
         id: clang
@@ -184,8 +184,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
-          check-latest: false
+          cache: true
+          check-latest: true
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
