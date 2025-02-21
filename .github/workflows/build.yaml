@@ -204,7 +204,7 @@ jobs:
         run: |
           set -ex
 
-          VERSION=4.2.4
+          VERSION=5.0.0
           temp_dir=$(mktemp -d)
           cd "$temp_dir"
           wget -qO- "https://github.com/upx/upx/releases/download/v${VERSION}/upx-${VERSION}-amd64_linux.tar.xz" | tar -xJvf - "upx-${VERSION}-amd64_linux/upx"
