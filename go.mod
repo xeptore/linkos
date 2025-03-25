@@ -9,7 +9,7 @@ require (
 	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
 	github.com/miekg/dns v1.1.64
 	github.com/panjf2000/gnet/v2 v2.7.2
-	github.com/rs/zerolog v1.33.0
+	github.com/rs/zerolog v1.34.0
 	github.com/samber/lo v1.49.1
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/stretchr/testify v1.10.0
