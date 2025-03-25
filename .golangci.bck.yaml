@@ -1,0 +1,68 @@
+run:
+  issues-exit-code: 8
+  timeout: 10m
+linters:
+  disable:
+    - cyclop
+    - contextcheck
+    - depguard
+    - dupl
+    - forbidigo
+    - forcetypeassert
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocyclo
+    - err113
+    - ireturn
+    - lll
+    - maintidx
+    - mnd
+    - nestif
+    - nlreturn
+    - nonamedreturns
+    - revive
+    - tagliatelle
+    - testpackage
+    - varnamelen
+    - wrapcheck
+    - wsl
+  presets:
+    - bugs
+    - comment
+    - complexity
+    - error
+    - format
+    - import
+    - metalinter
+    - module
+    - performance
+    - sql
+    - style
+    - test
+    - unused
+linters-settings:
+  errorlint:
+    errorf: false
+    errorf-multi: true
+    asserts: true
+    comparison: true
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/xeptore/linkos)
+    skip-generated: false
+  gosec:
+    excludes:
+      - G601
+  nlreturn:
+    block-size: 1
+  tagliatelle:
+    case:
+      use-field-name: true
+      rules:
+        json: camel
+        yaml: snake
+        envconfig: upperSnake
