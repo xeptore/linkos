@@ -1,5 +1,8 @@
 version: "3"
 
+vars:
+  GOLANGCI_LINT_VERSION: v2.0.1
+
 tasks:
   clean:
     cmd: go clean -r -cache -testcache -modcache
@@ -55,34 +58,33 @@ tasks:
             -ldflags="-X 'main.Version={{default "dev" .VERSION}}' -compressdwarf=true -extldflags=-static -s -w -buildid=''" \
             -o ./bin/server/linkos \
             ./cmd/server
+  
+  install-linter:
+    status:
+      - test -f ./tools/golangci-lint
+    cmds:
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b ./tools {{.GOLANGCI_LINT_VERSION}}
 
   lint:
     internal: true
-    requires:
-      vars:
-        - OUT_FORMAT
+    deps:
+      - task: install-linter
     cmd: |-
-      go tool \
-        github.com/golangci/golangci-lint/cmd/golangci-lint \
+      ./tools/golangci-lint \
         run {{ if .FIX }}--fix {{ end }}\
         --print-resources-usage \
-        --out-format="{{.OUT_FORMAT}}"
+        --output.text.path stdout
 
   lint:local:
     cmds:
       - task: lint
-        vars:
-          OUT_FORMAT: colored-line-number
 
   lint:local:fix:
     cmds:
       - task: lint
         vars:
-          OUT_FORMAT: colored-line-number
           FIX: true
 
   lint:ci:
     cmds:
       - task: lint
-        vars:
-          OUT_FORMAT: colored-line-number

@@ -1,12 +1,88 @@
+version: "2"
 run:
   issues-exit-code: 8
-  timeout: 10m
 linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - copyloopvar
+    - decorder
+    - dogsled
+    - dupword
+    - durationcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exhaustruct
+    - exptostd
+    - fatcontext
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - gochecksumtype
+    - goconst
+    - gocritic
+    - godot
+    - godox
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - grouper
+    - iface
+    - importas
+    - inamedparam
+    - interfacebloat
+    - intrange
+    - loggercheck
+    - makezero
+    - mirror
+    - misspell
+    - musttag
+    - nakedret
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - recvcheck
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - tagalign
+    - testableexamples
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+    - zerologlint
   disable:
-    - cyclop
     - contextcheck
+    - cyclop
     - depguard
     - dupl
+    - err113
     - forbidigo
     - forcetypeassert
     - funlen
@@ -14,7 +90,6 @@ linters:
     - gochecknoinits
     - gocognit
     - gocyclo
-    - err113
     - ireturn
     - lll
     - maintidx
@@ -28,41 +103,50 @@ linters:
     - varnamelen
     - wrapcheck
     - wsl
-  presets:
-    - bugs
-    - comment
-    - complexity
-    - error
-    - format
-    - import
-    - metalinter
-    - module
-    - performance
-    - sql
-    - style
-    - test
-    - unused
-linters-settings:
-  errorlint:
-    errorf: false
-    errorf-multi: true
-    asserts: true
-    comparison: true
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/xeptore/linkos)
-    skip-generated: false
-  gosec:
-    excludes:
-      - G601
-  nlreturn:
-    block-size: 1
-  tagliatelle:
-    case:
-      use-field-name: true
-      rules:
-        json: camel
-        yaml: snake
-        envconfig: upperSnake
+  settings:
+    errorlint:
+      errorf: false
+      errorf-multi: true
+      asserts: true
+      comparison: true
+    gosec:
+      excludes:
+        - G601
+    nlreturn:
+      block-size: 1
+    tagliatelle:
+      case:
+        rules:
+          envconfig: upperSnake
+          json: camel
+          yaml: snake
+        use-field-name: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/xeptore/linkos)
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
