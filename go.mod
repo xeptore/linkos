@@ -1,7 +1,6 @@
 module github.com/xeptore/linkos
 
 go 1.24.1
-
 require (
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b
 	github.com/google/go-github/v67 v67.0.0
@@ -15,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7
-	golang.org/x/net v0.37.0
+	golang.org/x/net v0.38.0
 	golang.org/x/sync v0.12.0
 	golang.org/x/sys v0.31.0
 	golang.zx2c4.com/wireguard/windows v0.5.3
