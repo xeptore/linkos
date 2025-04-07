@@ -7,7 +7,7 @@ require (
 	github.com/google/go-github/v67 v67.0.0
 	github.com/google/gopacket v1.1.19
 	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
-	github.com/miekg/dns v1.1.64
+	github.com/miekg/dns v1.1.65
 	github.com/panjf2000/gnet/v2 v2.7.2
 	github.com/rs/zerolog v1.34.0
 	github.com/samber/lo v1.49.1
