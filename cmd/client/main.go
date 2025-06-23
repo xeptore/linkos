@@ -180,7 +180,7 @@ func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err er
 		switch {
 		case nil != err:
 			logger.Error().Err(err).Func(errutil.TreeLog(err)).Msg("Failed to check for newer version existence. Make sure you have internet access and rerun the application.")
-			return nil
+			// return nil
 		case exists:
 			logger.Warn().Msg("Newer version exists, and is going to be downloaded...")
 			if err := update.Download(ctx, latestTag); nil != err {
