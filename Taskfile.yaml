@@ -72,7 +72,7 @@ tasks:
     cmd: |-
       ./tools/golangci-lint \
         run {{ if .FIX }}--fix {{ end }}\
-        --print-resources-usage \
+        --verbose \
         --output.text.path stdout
 
   lint:local:
