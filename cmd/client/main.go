@@ -190,7 +190,7 @@ func run(ctx context.Context, logger zerolog.Logger, cfg *config.Client) (err er
 				logger.Error().Func(errutil.TreeLog(err)).Msg("Failed to download latest release. Download link will be opened in a second.")
 				downloadURL := "https://github.com/xeptore/linkos/releases/download/" + latestTag + "/" + update.AssetFilename()
 				cmd := []string{"start", downloadURL}
-				if out, err := exec.Command("cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
+				if out, err := exec.CommandContext(ctx, "cmd.exe", "/c", strings.Join(cmd, " ")).CombinedOutput(); nil != err { //nolint:gosec
 					return &OpenLatestVersionDownloadURLError{URL: downloadURL, CommandOut: out}
 				}
 			} else {
