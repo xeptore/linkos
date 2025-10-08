@@ -26,7 +26,7 @@ var (
 
 func InitializeUnicastIPAddressEntry() (row C.MIB_UNICASTIPADDRESS_ROW) {
 	initializeUnicastIPAddressEntry.Call(uintptr(unsafe.Pointer(&row))) //nolint:errcheck
-	return
+	return row
 }
 
 func CreateUnicastIPAddressEntry(row *C.MIB_UNICASTIPADDRESS_ROW) error {
@@ -44,6 +44,5 @@ func SetAdapterIPv4(luid uint64, ip []byte, subnet int) (err error) {
 	row.OnLinkPrefixLength = C.uchar(subnet)
 	row.DadState = C.IpDadStatePreferred
 	*(*uint64)(unsafe.Pointer(&row.InterfaceLuid)) = luid
-	err = CreateUnicastIPAddressEntry(&row)
-	return
+	return CreateUnicastIPAddressEntry(&row)
 }
