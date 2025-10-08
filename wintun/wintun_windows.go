@@ -129,5 +129,5 @@ func RunningVersion() (string, error) {
 // LUID returns the LUID of the adapter.
 func (wintun *Adapter) LUID() (luid uint64) {
 	syscall.SyscallN(procWintunGetAdapterLUID.Addr(), wintun.handle, uintptr(unsafe.Pointer(&luid)), 0) //nolint:errcheck
-	return
+	return luid
 }
