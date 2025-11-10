@@ -87,3 +87,9 @@ tasks:
   lint:ci:
     cmds:
       - task: lint
+
+  update:
+    deps:
+      - task: tidy
+    cmds:
+      - go get -u -x ./...
