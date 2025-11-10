@@ -8,7 +8,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
 	github.com/miekg/dns v1.1.68
-	github.com/panjf2000/gnet/v2 v2.9.4
+	github.com/panjf2000/gnet/v2 v2.9.5
 	github.com/rs/zerolog v1.34.0
 	github.com/samber/lo v1.52.0
 	github.com/schollz/progressbar/v3 v3.18.0
