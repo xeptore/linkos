@@ -57,7 +57,7 @@ func (s *Session) Close() error {
 	}()
 
 	stopWaitDur := time.Second * 5
-	if exited := s.waitForExit(uint32(stopWaitDur.Milliseconds())); !exited { //nolint:gosec
+	if exited := s.waitForExit(uint32(stopWaitDur.Milliseconds())); !exited {
 		return fmt.Errorf("tun: timed out waiting for receive ring stop after %s", stopWaitDur.String())
 	}
 
