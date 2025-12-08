@@ -16,7 +16,7 @@ require (
 	go.uber.org/zap v1.27.1
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39
 	golang.org/x/net v0.47.0
-	golang.org/x/sync v0.18.0
+	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.39.0
 	golang.zx2c4.com/wireguard/windows v0.5.3
 	gopkg.in/ini.v1 v1.67.0
