@@ -8,10 +8,10 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
 	github.com/miekg/dns v1.1.69
-	github.com/panjf2000/gnet/v2 v2.9.6
+	github.com/panjf2000/gnet/v2 v2.9.7
 	github.com/rs/zerolog v1.34.0
 	github.com/samber/lo v1.52.0
-	github.com/schollz/progressbar/v3 v3.18.0
+	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/zap v1.27.1
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39
