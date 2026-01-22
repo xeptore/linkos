@@ -7,7 +7,7 @@ require (
 	github.com/google/go-github/v67 v67.0.0
 	github.com/google/gopacket v1.1.19
 	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
-	github.com/miekg/dns v1.1.69
+	github.com/miekg/dns v1.1.72
 	github.com/panjf2000/gnet/v2 v2.9.7
 	github.com/rs/zerolog v1.34.0
 	github.com/samber/lo v1.52.0
@@ -37,10 +37,10 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
-	golang.org/x/tools v0.39.0 // indirect
+	golang.org/x/tools v0.40.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
