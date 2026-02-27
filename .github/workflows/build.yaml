@@ -163,7 +163,7 @@ jobs:
         working-directory: .\bin\client\
         run: Compress-Archive -CompressionLevel Optimal -Path '*' -DestinationPath "${{ github.workspace }}\client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip"
       - name: Upload Artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip
           path: ./client_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.zip
@@ -220,7 +220,7 @@ jobs:
         working-directory: ./bin/server
         run: tar -cvf '${{ github.workspace }}/server_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.tar' .
       - name: Upload Artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: server_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.tar
           path: ./server_${{ steps.os_arch.outputs.os }}_${{ steps.os_arch.outputs.arch }}.tar
