@@ -13,7 +13,7 @@ require (
 	github.com/samber/lo v1.53.0
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/stretchr/testify v1.11.1
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96
 	golang.org/x/net v0.53.0
 	golang.org/x/sync v0.20.0
