@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v67/github"
+	"github.com/google/go-github/v88/github"
 	"github.com/rs/zerolog"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/sys/windows"
@@ -24,7 +24,10 @@ import (
 func NewerVersionExists(ctx context.Context, logger zerolog.Logger, currentVersion string) (exists bool, latestTag string, err error) {
 	httpClient := http.DefaultClient
 	httpClient.Transport = dnsutil.FromRoundTripper(http.DefaultTransport)
-	client := github.NewClient(httpClient)
+	client, err := github.NewClient(github.WithHTTPClient(httpClient))
+	if nil != err {
+		return false, "", fmt.Errorf("update: failed to initialize github client: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -85,7 +88,10 @@ func getReleasePage(ctx context.Context, client *github.Client, page int) ([]*gi
 func Download(ctx context.Context, tag string) (err error) {
 	httpClient := http.DefaultClient
 	httpClient.Transport = dnsutil.FromRoundTripper(http.DefaultTransport)
-	client := github.NewClient(httpClient)
+	client, err := github.NewClient(github.WithHTTPClient(httpClient))
+	if nil != err {
+		return fmt.Errorf("update: failed to initialize github client: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
