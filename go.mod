@@ -1,6 +1,6 @@
 module github.com/xeptore/linkos
 
-go 1.25.6
+go 1.26.3
 
 require (
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b
@@ -8,7 +8,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/matryer/try v0.0.0-20161228173917-9ac251b645a2
 	github.com/miekg/dns v1.1.72
-	github.com/panjf2000/gnet/v2 v2.9.7
+	github.com/panjf2000/gnet/v2 v2.9.8
 	github.com/rs/zerolog v1.35.1
 	github.com/samber/lo v1.53.0
 	github.com/schollz/progressbar/v3 v3.19.0
@@ -18,7 +18,7 @@ require (
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0
-	golang.zx2c4.com/wireguard/windows v0.5.3
+	golang.zx2c4.com/wireguard/windows v1.0.1
 	gopkg.in/ini.v1 v1.67.2
 )
 
