@@ -24,7 +24,7 @@ func WaitForSingleObject(h windows.Handle, timeout uint32) (uint32, error) {
 	if !win.IsErrSuccess(err) {
 		return uint32(0), err
 	}
-	return uint32(r1), nil
+	return uint32(r1), nil //nolint:gosec // Win32 return value fits in 32 bits
 }
 
 func boolToUintptr(b bool) uintptr {
@@ -39,7 +39,7 @@ func WaitForMultipleObjects(handles []windows.Handle, waitAll bool, timeout uint
 	if !win.IsErrSuccess(err) {
 		return 0, err
 	}
-	return uint32(r1), nil
+	return uint32(r1), nil //nolint:gosec // Win32 return value fits in 32 bits
 }
 
 func SetEvent(h windows.Handle) error {
