@@ -54,7 +54,7 @@ jobs:
           cache: true
           install: base-devel mingw-w64-clang-x86_64-clang
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Code Linter
@@ -77,7 +77,7 @@ jobs:
           cache: true
           check-latest: true
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Code Linter
@@ -116,7 +116,7 @@ jobs:
           ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang --version
           ${{ steps.msys2.outputs.msys2-location }}\clang64\bin\clang++ --version
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Get OS & Arch
@@ -187,7 +187,7 @@ jobs:
           cache: true
           check-latest: true
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Generate Version
