@@ -1,7 +1,7 @@
 name: Build
 on:
-  pull_request: 
-    branches: 
+  pull_request:
+    branches:
       - dev
       - main
   push:
@@ -258,7 +258,7 @@ jobs:
         with:
           name: ${{ env.RELEASE_NAME }}
           tag_name: ${{ env.TAG_NAME }}
-          draft: ${{ github.ref_name == 'dev' }}
+          draft: true
           prerelease: ${{ github.ref_name == 'dev' }}
           make_latest: ${{ github.ref_name == 'main' && 'true' || 'false' }}
           generate_release_notes: true
