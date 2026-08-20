@@ -63,7 +63,7 @@ func (c consoleWriteLevel) WriteLevel(level zerolog.Level, p []byte) (n int, err
 func NewConsoleWriter(level zerolog.Level) io.Writer {
 	return zerolog.SyncWriter(
 		consoleWriteLevel{
-			w: zerolog.ConsoleWriter{ //nolint:exhaustruct
+			w: zerolog.ConsoleWriter{ //nolint:exhaustruct_v5
 				Out:        os.Stderr,
 				TimeFormat: time.DateTime,
 			},

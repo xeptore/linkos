@@ -76,7 +76,7 @@ func (w *common) keepAlive(ctx context.Context, conn *net.UDPConn) error {
 
 // Credit goes to https://devv.ai
 func newKeepAlivePacket(src, dst net.IP) ([]byte, error) {
-	header := &ipv4.Header{ //nolint:exhaustruct
+	header := &ipv4.Header{ //nolint:exhaustruct_v5
 		Version:  ipv4.Version,
 		Len:      ipv4.HeaderLen,
 		TOS:      0,
@@ -164,7 +164,7 @@ func filterOutgoingPacket(logger zerolog.Logger, p []byte) (bool, error) {
 		panic(fmt.Sprintf("unexpected packet version: %d", v))
 	}
 
-	packet := gopacket.NewPacket(p, decoder, gopacket.DecodeOptions{Lazy: true, NoCopy: true}) //nolint:exhaustruct
+	packet := gopacket.NewPacket(p, decoder, gopacket.DecodeOptions{Lazy: true, NoCopy: true}) //nolint:exhaustruct_v5
 	if err := packet.ErrorLayer(); nil != err {
 		return false, fmt.Errorf("tunnel: failed to parse packet with length %d: %v", len(p), err.Error())
 	}

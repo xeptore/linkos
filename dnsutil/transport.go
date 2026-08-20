@@ -9,12 +9,12 @@ import (
 )
 
 func FromRoundTripper(rt http.RoundTripper) http.RoundTripper {
-	dialer := &net.Dialer{ //nolint:exhaustruct
-		Resolver: &net.Resolver{ //nolint:exhaustruct
+	dialer := &net.Dialer{ //nolint:exhaustruct_v5
+		Resolver: &net.Resolver{ //nolint:exhaustruct_v5
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (conn net.Conn, err error) {
 				for _, dnsServer := range dnsServers {
-					d := net.Dialer{Timeout: 3 * time.Second} //nolint:exhaustruct
+					d := net.Dialer{Timeout: 3 * time.Second} //nolint:exhaustruct_v5
 					conn, err = d.DialContext(ctx, "udp", dnsServer)
 					if nil != err {
 						continue

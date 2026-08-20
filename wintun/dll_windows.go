@@ -16,7 +16,7 @@ import (
 )
 
 func (d *dll) NewProc(name string) *proc {
-	return &proc{dll: d, Name: name} //nolint:exhaustruct
+	return &proc{dll: d, Name: name} //nolint:exhaustruct_v5
 }
 
 type proc struct {
@@ -66,7 +66,7 @@ type dll struct {
 }
 
 func mustLoadDLL(name string) *dll {
-	d := &dll{Name: name} //nolint:exhaustruct
+	d := &dll{Name: name} //nolint:exhaustruct_v5
 	if atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&d.module))) != nil {
 		return nil
 	}
