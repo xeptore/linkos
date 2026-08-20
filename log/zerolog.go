@@ -10,7 +10,7 @@ import (
 
 func New() zerolog.Logger {
 	return newLogger(
-		zerolog.ConsoleWriter{ //nolint:exhaustruct
+		zerolog.ConsoleWriter{ //nolint:exhaustruct_v5
 			Out:        os.Stderr,
 			TimeFormat: time.DateTime,
 		},
