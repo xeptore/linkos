@@ -18,7 +18,7 @@ require (
 	golang.org/x/net v0.59.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
-	golang.zx2c4.com/wireguard/windows v1.0.1
+	golang.zx2c4.com/wireguard/windows v1.1.1
 	gopkg.in/ini.v1 v1.67.3
 )
 
